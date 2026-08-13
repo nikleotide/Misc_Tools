@@ -1,0 +1,3094 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fourier Plotter — draw a shape, get its sine waves</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E6E7DE;
+    --paper-sunk:#DCDED2;
+    --paper-raised:#EFF0E8;
+    --rule:#BFC4B6;
+    --rule-soft:#D0D3C7;
+    --ink:#171D19;
+    --ink-soft:#5C6259;
+    --ink-faint:#8B9086;
+    --pen-x:#B4322A;
+    --pen-y:#1E4F8A;
+    --pen-z:#3F6B33;
+    --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --display:"Archivo", system-ui, -apple-system, sans-serif;
+  }
+
+  [hidden]{display:none !important}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:var(--mono);font-size:13px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .sheet{
+    max-width:1240px;margin:0 auto;
+    border-left:1px solid var(--rule);border-right:1px solid var(--rule);
+    min-height:100vh;background:var(--paper);
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    display:flex;align-items:flex-end;justify-content:space-between;gap:24px;
+    padding:18px 22px 14px;
+  }
+  .wordmark{font-family:var(--display);font-weight:800;font-size:26px;letter-spacing:-0.025em;line-height:1;margin:0}
+  .wordmark em{font-style:normal;color:var(--pen-x)}
+  .tagline{margin:6px 0 0;color:var(--ink-soft);font-size:12px;max-width:56ch}
+  .plate{text-align:right;font-size:10.5px;color:var(--ink-faint);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+  .plate b{display:block;color:var(--ink-soft);font-weight:500;letter-spacing:.14em}
+
+  /* ---------- tabs ---------- */
+  .tabs{display:flex;gap:0;padding:0 22px;border-bottom:1px solid var(--ink)}
+  .tab{
+    font-family:var(--display);font-weight:800;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+    background:transparent;border:1px solid transparent;border-bottom:none;
+    padding:9px 18px;margin-bottom:-1px;color:var(--ink-faint);cursor:pointer;border-radius:0;
+  }
+  .tab:hover{color:var(--ink-soft)}
+  .tab[aria-selected="true"]{
+    color:var(--ink);background:var(--paper);
+    border-color:var(--ink);border-bottom:1px solid var(--paper);
+  }
+  .tab:focus-visible{outline:2px solid var(--pen-x);outline-offset:-3px}
+  .tab small{display:block;font-family:var(--mono);font-weight:400;font-size:9.5px;letter-spacing:.08em;text-transform:none;color:var(--ink-faint)}
+
+  .eyebrow{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 8px;font-weight:600}
+  .eyebrow .k{color:var(--ink-soft)}
+
+  /* ---------- workbench ---------- */
+  .workbench{display:grid;grid-template-columns:minmax(0,1fr) 296px}
+  .stage-cell{border-right:1px solid var(--rule);min-width:0;display:flex;flex-direction:column}
+  .surface-wrap{position:relative}
+  canvas.surface{display:block;width:100%;touch-action:none}
+  #bed{height:clamp(400px,60vh,580px);cursor:crosshair}
+  #view3d{height:clamp(330px,44vh,430px);cursor:grab}
+  #view3d.dragging{cursor:grabbing}
+  #plan{height:180px;cursor:crosshair}
+  #height{height:180px;cursor:crosshair}
+
+  .minis{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--rule)}
+  .mini{padding:9px 12px 4px;min-width:0}
+  .mini + .mini{border-left:1px solid var(--rule)}
+  .mini-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:2px}
+  .mini-head .t{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);font-weight:600}
+  .mini-head .h{font-size:10px;color:var(--ink-faint)}
+
+  .strip{
+    display:flex;justify-content:space-between;gap:16px;padding:7px 14px;
+    border-top:1px solid var(--rule-soft);
+    font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);
+    pointer-events:none;
+  }
+  .strip .live{color:var(--ink-soft)}
+
+  /* ---------- console ---------- */
+  .console{padding:16px 18px 22px;display:flex;flex-direction:column;gap:17px}
+  .group{display:flex;flex-direction:column;gap:9px}
+  .divider{height:1px;background:var(--rule)}
+  .btnrow{display:flex;gap:6px;flex-wrap:wrap}
+
+  button{
+    font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink);background:var(--paper-raised);
+    border:1px solid var(--rule);border-radius:2px;padding:7px 11px;cursor:pointer;
+    transition:background .12s ease, transform .06s ease;
+  }
+  button:hover{background:#F6F7F0}
+  button:active{transform:translateY(1px)}
+  button:focus-visible{outline:2px solid var(--pen-x);outline-offset:2px}
+  button.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  button.primary:hover{background:#252D28}
+
+  .linkish{
+    background:none;border:none;padding:0;margin:0;text-transform:none;letter-spacing:0;
+    font-size:inherit;font-weight:600;color:var(--ink);
+    border-bottom:1px dashed var(--ink-faint);cursor:pointer;border-radius:0;
+  }
+  .linkish:hover{background:none;color:var(--pen-x);border-bottom-color:var(--pen-x)}
+  .linkish:active{transform:none}
+
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .field label{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)}
+  .field .val{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;margin:0;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--rule)}
+  input[type=range]::-moz-range-track{height:2px;background:var(--rule)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:15px;border-radius:1px;background:var(--ink);border:none;margin-top:-6.5px}
+  input[type=range]::-moz-range-thumb{width:11px;height:15px;border-radius:1px;background:var(--ink);border:none}
+  input[type=range]:focus-visible{outline:2px solid var(--pen-x);outline-offset:3px}
+
+  .minis.one{grid-template-columns:1fr}
+  #sndStage{height:clamp(300px,40vh,400px);cursor:grab}
+  #sndStage.dragging{cursor:grabbing}
+  #sndWave{height:150px;cursor:ew-resize}
+  #imgStage{height:clamp(400px,58vh,560px);cursor:grab}
+  #imgStage.dragging{cursor:grabbing}
+  .filebtn{display:inline-block}
+  .filebtn input{position:absolute;width:0;height:0;opacity:0}
+  .filebtn span{
+    display:inline-block;font-family:var(--mono);font-size:11px;font-weight:500;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--ink);
+    background:var(--paper-raised);border:1px solid var(--rule);border-radius:2px;
+    padding:7px 11px;cursor:pointer;
+  }
+  .filebtn span:hover{background:#F6F7F0}
+  .filebtn input:focus-visible + span{outline:2px solid var(--pen-x);outline-offset:2px}
+  .rec{color:var(--pen-x)}
+  .hint{margin:0;font-size:10.5px;line-height:1.5;color:var(--ink-faint)}
+  #modeSeg,#fixSeg{align-self:flex-start}
+  #fixSeg button{padding:6px 9px}
+  .toggles{display:flex;flex-direction:column;gap:6px}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink-soft);cursor:pointer}
+  .toggle input{accent-color:var(--ink);width:13px;height:13px;margin:0}
+
+  .formula{
+    background:var(--paper-sunk);border:1px solid var(--rule-soft);border-radius:2px;
+    padding:9px 10px;font-size:11px;line-height:1.7;word-break:break-word;
+  }
+  .formula + .formula{margin-top:6px}
+  .formula .lhs{font-weight:600}
+  .formula.ax-x .lhs{color:var(--pen-x)}
+  .formula.ax-y .lhs{color:var(--pen-y)}
+  .formula.ax-z .lhs{color:var(--pen-z)}
+  .formula .dim{color:var(--ink-faint)}
+
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+  .stat .k{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}
+  .stat .v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25}
+  .stat .v small{font-size:10px;font-weight:400;color:var(--ink-faint);letter-spacing:.05em}
+
+  /* ---------- channels + spectrum ---------- */
+  .channels{display:grid;border-top:1px solid var(--ink)}
+  .channels.n2{grid-template-columns:1fr 1fr}
+  .channels.n3{grid-template-columns:1fr 1fr 1fr}
+  .channel{padding:12px 16px 8px;min-width:0}
+  .channel + .channel{border-left:1px solid var(--rule)}
+  .chan-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
+  .chan-id{font-family:var(--display);font-weight:800;font-size:13px}
+  .chan-desc{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+  canvas.wave{display:block;width:100%;height:158px}
+
+  .spectrum-cell{border-top:1px solid var(--rule);padding:12px 16px 20px}
+  .spec-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:4px}
+  canvas.spectrum{display:block;width:100%;height:150px;cursor:pointer}
+
+  .colophon{border-top:1px solid var(--rule);padding:14px 22px 30px;font-size:11.5px;color:var(--ink-faint);max-width:82ch}
+  .colophon b{color:var(--ink-soft);font-weight:500}
+  .colophon p{margin:0 0 8px}
+
+  /* ---------- export dialog ---------- */
+  dialog{
+    border:1px solid var(--ink);border-radius:2px;padding:0;background:var(--paper);
+    color:var(--ink);font-family:var(--mono);width:min(880px,94vw);max-height:88vh;
+  }
+  dialog::backdrop{background:rgba(23,29,25,.42)}
+  .dlg-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:16px 18px 12px;border-bottom:1px solid var(--rule)}
+  .dlg-head h2{font-family:var(--display);font-weight:800;font-size:17px;margin:0;letter-spacing:-.01em}
+  .dlg-head p{margin:4px 0 0;font-size:11px;color:var(--ink-soft);max-width:60ch}
+  .dlg-bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 18px;border-bottom:1px solid var(--rule-soft);background:var(--paper-sunk)}
+  .seg{display:flex;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+  .seg button{border:none;border-radius:0;background:var(--paper-raised);padding:6px 12px}
+  .seg button + button{border-left:1px solid var(--rule)}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .dlg-body{padding:0;overflow:auto;max-height:min(58vh,560px)}
+  .dlg-body pre{
+    margin:0;padding:16px 18px;font-size:11.5px;line-height:1.6;white-space:pre;
+    font-family:var(--mono);color:var(--ink);
+  }
+  table.terms{border-collapse:collapse;width:100%;font-size:11.5px;font-variant-numeric:tabular-nums}
+  table.terms th,table.terms td{padding:4px 12px;text-align:right;border-bottom:1px solid var(--rule-soft);white-space:nowrap}
+  table.terms th{position:sticky;top:0;background:var(--paper);text-align:right;font-weight:600;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);border-bottom:1px solid var(--rule)}
+  table.terms th:first-child,table.terms td:first-child{text-align:left;padding-left:18px}
+  table.terms td:last-child{padding-right:18px}
+  table.terms tbody tr:hover{background:var(--paper-sunk)}
+  .col-x{color:var(--pen-x)} .col-y{color:var(--pen-y)} .col-z{color:var(--pen-z)}
+  .dlg-foot{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:11px 18px;border-top:1px solid var(--rule);font-size:11px;color:var(--ink-faint);flex-wrap:wrap}
+
+  @media (max-width:880px){
+    .workbench{grid-template-columns:minmax(0,1fr)}
+    .stage-cell{border-right:none;border-bottom:1px solid var(--rule)}
+    .channels.n2,.channels.n3{grid-template-columns:1fr}
+    .channel + .channel{border-left:none;border-top:1px solid var(--rule)}
+    .minis{grid-template-columns:1fr}
+    .mini + .mini{border-left:none;border-top:1px solid var(--rule)}
+    #bed{height:clamp(330px,52vh,440px)}
+    .masthead{flex-direction:column;align-items:flex-start;gap:10px}
+    .plate{text-align:left}
+    .tabs{padding:0 12px}
+  }
+  @media (prefers-reduced-motion:reduce){ button{transition:none} }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div>
+      <h1 class="wordmark">Fourier <em>Plotter</em></h1>
+      <p class="tagline">Draw a closed shape. It gets split into a sum of sine waves &mdash; one stack of them per axis, each driving the pen along that axis.</p>
+    </div>
+    <div class="plate">
+      <b>Harmonic synthesiser</b>
+      512 samples &middot; 256 harmonics
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Dimensions">
+    <button class="tab" role="tab" id="tab-2d" aria-controls="panel-2d" aria-selected="true">Plane<small>x, y</small></button>
+    <button class="tab" role="tab" id="tab-3d" aria-controls="panel-3d" aria-selected="false">Space<small>x, y, z</small></button>
+    <button class="tab" role="tab" id="tab-snd" aria-controls="panel-snd" aria-selected="false">Sound<small>one wave</small></button>
+    <button class="tab" role="tab" id="tab-img" aria-controls="panel-img" aria-selected="false">Image<small>traced edge</small></button>
+  </div>
+
+  <div class="workbench">
+    <div class="stage-cell">
+
+      <!-- ============ 2D ============ -->
+      <div id="panel-2d" role="tabpanel" aria-labelledby="tab-2d">
+        <div class="surface-wrap">
+          <canvas id="bed" class="surface" role="img" aria-label="Plotter bed: draw a closed shape to see it rebuilt from sine waves"></canvas>
+        </div>
+        <div class="strip">
+          <span id="strip2mode">Plotter bed</span>
+          <span class="live" id="strip2live">&mdash;</span>
+        </div>
+      </div>
+
+      <!-- ============ 3D ============ -->
+      <div id="panel-3d" role="tabpanel" aria-labelledby="tab-3d" hidden>
+        <div class="surface-wrap">
+          <canvas id="view3d" class="surface" role="img" aria-label="Three dimensional view of the curve; drag to orbit"></canvas>
+        </div>
+        <div class="strip">
+          <span id="strip3mode">Drag to orbit &middot; shift-scroll to zoom</span>
+          <span class="live" id="strip3live">&mdash;</span>
+        </div>
+        <div class="minis">
+          <div class="mini">
+            <div class="mini-head">
+              <span class="t">Plan &mdash; looking down</span>
+              <span class="h">draw the loop</span>
+            </div>
+            <canvas id="plan" class="surface" aria-label="Plan view: draw the closed loop seen from above"></canvas>
+          </div>
+          <div class="mini">
+            <div class="mini-head">
+              <span class="t">Height &mdash; z along the loop</span>
+              <span class="h">draw left to right</span>
+            </div>
+            <canvas id="height" class="surface" aria-label="Height profile: draw how high the pen rides as it travels the loop"></canvas>
+          </div>
+        </div>
+      </div>
+      <!-- ============ sound ============ -->
+      <div id="panel-snd" role="tabpanel" aria-labelledby="tab-snd" hidden>
+        <div class="surface-wrap">
+          <canvas id="sndStage" class="surface" role="img" aria-label="One stack of sine waves rebuilding the selected slice of sound"></canvas>
+        </div>
+        <div class="strip">
+          <span id="strip4mode">Scroll to zoom &middot; shift-drag to pan</span>
+          <span class="live" id="strip4live">&mdash;</span>
+        </div>
+        <div class="minis one">
+          <div class="mini">
+            <div class="mini-head">
+              <span class="t">Waveform &mdash; drag to move the window</span>
+              <span class="h" id="sndInfo">no audio loaded</span>
+            </div>
+            <canvas id="sndWave" class="surface" aria-label="Recorded waveform with the analysed window highlighted"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ image ============ -->
+      <div id="panel-img" role="tabpanel" aria-labelledby="tab-img" hidden>
+        <div class="surface-wrap">
+          <canvas id="imgStage" class="surface" role="img" aria-label="Outline extracted from the uploaded picture, rebuilt from sine waves"></canvas>
+        </div>
+        <div class="strip">
+          <span id="strip5mode">Scroll to zoom &middot; shift-drag to pan</span>
+          <span class="live" id="strip5live">&mdash;</span>
+        </div>
+      </div>
+
+      <div class="channels n2" id="channels"></div>
+
+      <section class="spectrum-cell">
+        <div class="spec-head">
+          <p class="eyebrow" style="margin:0">Amplitude spectrum <span class="k">&mdash; click to set the cutoff</span></p>
+        </div>
+        <canvas id="spectrum" class="spectrum"></canvas>
+      </section>
+    </div>
+
+    <!-- ============ console ============ -->
+    <div class="console">
+      <div class="group">
+        <p class="eyebrow" id="penLabel">Pen</p>
+        <div class="btnrow">
+          <button id="btnPlay" class="primary">Pause</button>
+          <button id="btnUndo">Undo stroke</button>
+          <button id="btnClear">Clear</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="eyebrow">How it draws</p>
+        <div class="seg" id="modeSeg" role="group" aria-label="Drawing mode">
+          <button data-mode="trace" aria-pressed="true">Trace</button>
+          <button data-mode="scan" aria-pressed="false">Scan</button>
+        </div>
+        <p class="hint" id="modeHint">The pen follows the curve in order, one point at a time.</p>
+      </div>
+
+      <div class="group">
+        <p class="eyebrow" id="loadLabel">Or load a shape</p>
+        <div class="btnrow" id="presets2">
+          <button data-preset="star">Star</button>
+          <button data-preset="heart">Heart</button>
+          <button data-preset="square">Square</button>
+          <button data-preset="flower">Flower</button>
+        </div>
+        <div class="btnrow" id="presets4" hidden>
+          <button data-preset4="square">Square</button>
+          <button data-preset4="saw">Sawtooth</button>
+          <button data-preset4="vowel">Vowel</button>
+          <button data-preset4="bell">Bell</button>
+        </div>
+        <div class="btnrow" id="presets3" hidden>
+          <button data-preset3="trefoil">Trefoil knot</button>
+          <button data-preset3="crown">Crown</button>
+          <button data-preset3="lissajous">Lissajous</button>
+          <button data-preset3="saddle">Saddle</button>
+        </div>
+      </div>
+
+      <div class="group" id="sndTools" hidden>
+        <p class="eyebrow">Audio</p>
+        <div class="btnrow">
+          <button id="btnRec">Record</button>
+          <label class="filebtn"><input type="file" id="sndFile" accept="audio/*"><span>Upload</span></label>
+        </div>
+        <div class="field">
+          <div class="top"><label for="winLen">Window</label><span class="val" id="winLenVal">&mdash;</span></div>
+          <input type="range" id="winLen" min="0" max="1000" value="500" step="1" />
+        </div>
+        <p class="hint" id="winHint">&nbsp;</p>
+        <div class="btnrow">
+          <button id="btnOneCycle">One cycle</button>
+          <button id="btnWholeClip">Whole clip</button>
+        </div>
+        <div class="btnrow">
+          <button id="btnPlayRaw" title="Plays the selected window as recorded. Windows shorter than half a second repeat so you can hear them.">Play window</button>
+          <button id="btnPlaySyn" title="The same window rebuilt from the current number of harmonics.">Play rebuilt</button>
+        </div>
+        <p class="hint" id="playHint">&nbsp;</p>
+      </div>
+
+      <div class="group" id="imgTools" hidden>
+        <p class="eyebrow">Picture</p>
+        <div class="btnrow">
+          <label class="filebtn"><input type="file" id="imgFile" accept="image/*"><span>Upload image</span></label>
+          <button id="btnInvert">Flip subject</button>
+        </div>
+        <div class="field">
+          <div class="top"><label for="thresh">Edge sensitivity</label><span class="val" id="threshVal">18</span></div>
+          <input type="range" id="thresh" min="3" max="70" value="18" step="1" />
+        </div>
+        <p class="eyebrow" style="margin:4px 0 0">Fix the edge</p>
+        <div class="seg" id="fixSeg" role="group" aria-label="Edge editing">
+          <button data-fix="pan" aria-pressed="true">Pan</button>
+          <button data-fix="add" aria-pressed="false">Add</button>
+          <button data-fix="cut" aria-pressed="false">Cut</button>
+          <button data-fix="draw" aria-pressed="false">Draw</button>
+        </div>
+        <p class="hint" id="fixHint">Drag to move the picture around.</p>
+        <div class="field" id="brushField" hidden>
+          <div class="top"><label for="brush">Brush</label><span class="val" id="brushVal">14</span></div>
+          <input type="range" id="brush" min="3" max="60" value="14" step="1" />
+        </div>
+        <div class="btnrow"><button id="btnResetEdits">Undo my edits</button></div>
+        <label class="toggle"><input type="checkbox" id="tgPhoto" checked> Show the picture underneath</label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="group">
+        <div class="field">
+          <div class="top"><label for="zoom">Zoom</label><span class="val" id="zoomVal">1.0&times;</span></div>
+          <input type="range" id="zoom" min="40" max="600" value="100" step="1" />
+        </div>
+        <div class="btnrow"><button id="btnResetView">Reset view</button></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="group">
+        <div class="field">
+          <div class="top">
+            <label for="harm" id="harmLabel">Harmonics k &le;</label>
+            <span class="val" id="harmVal">16</span>
+          </div>
+          <input type="range" id="harm" min="1" max="256" value="16" step="1" />
+        </div>
+        <div class="field" id="scanField" hidden>
+          <div class="top"><label for="cols">Scan columns</label><span class="val" id="colsVal">110</span></div>
+          <input type="range" id="cols" min="12" max="400" value="110" step="1" />
+        </div>
+        <div class="field">
+          <div class="top"><label for="speed">Pen speed</label><span class="val" id="speedVal">1.0&times;</span></div>
+          <input type="range" id="speed" min="0" max="300" value="100" step="1" />
+        </div>
+        <div class="field">
+          <div class="top"><label for="pos">Position t</label><span class="val" id="posVal">0.000</span></div>
+          <input type="range" id="pos" min="0" max="1000" value="0" step="1" />
+        </div>
+      </div>
+
+      <div class="toggles">
+        <label class="toggle" id="wrapCircles"><input type="checkbox" id="tgCircles" checked> Show the rotating vectors</label>
+        <label class="toggle"><input type="checkbox" id="tgGhost" checked> Show the finished outline</label>
+        <label class="toggle" id="wrapSeam" hidden><input type="checkbox" id="tgSeam" checked> Match the height at the seam</label>
+        <label class="toggle"><input type="checkbox" id="tgSort"> Keep the loudest harmonics first</label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="group">
+        <p class="eyebrow">Series</p>
+        <div id="formulas"><div class="formula"><span class="dim">Draw something to see the series.</span></div></div>
+        <div><button class="linkish" id="btnFull">Full series and export code &rarr;</button></div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="k">Terms per axis</div><div class="v" id="stTerms">&mdash;</div></div>
+        <div class="stat"><div class="k">Fit error</div><div class="v" id="stErr">&mdash;</div></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="colophon">
+    <p><b>How it works.</b> Your stroke is resampled into 512 points evenly spaced along its length, so travelling once around the shape takes t from 0 to 1. That gives one periodic signal per axis, and each is run through a discrete Fourier transform to get an amplitude and a phase for every harmonic k. Rebuilding a signal means adding those sines back up: each rotating vector is one sine term, and its shadow on the axis is that term's contribution.</p>
+    <p><b>Sound.</b> A recording is a wave, and one slice of it is one period. The app finds the repeating cycle by autocorrelation, resamples it to 512 points, and decomposes it exactly as it does a drawing &mdash; except there is only one axis, so there is only one stack of vectors. Play the window against the rebuilt version to hear what a given number of harmonics keeps.</p>
+    <p><b>Image.</b> The picture's background colour is estimated from its border, everything far enough from it becomes the subject, the largest connected region is kept, and its outer edge is walked pixel by pixel into a closed loop. That loop is a drawing like any other.</p>
+    <p><b>Scan mode.</b> Trace draws in parameter order, the way the pen actually moves. Scan sweeps a line across the shape's own x axis instead and marks every y the curve passes through at that column &mdash; two of them wherever the shape doubles back, more where it folds again. It is the same series either way; only the order of arrival changes.</p>
+    <p><b>In space.</b> The plan view sets x(t) and y(t); the height strip sets z(t) as the pen travels the loop. Three vector stacks, one per axis, meet at the pen.</p>
+  </footer>
+</div>
+
+<!-- ============ export dialog ============ -->
+<dialog id="dlg" aria-labelledby="dlgTitle">
+  <div class="dlg-head">
+    <div>
+      <h2 id="dlgTitle">Full series</h2>
+      <p id="dlgSub"></p>
+    </div>
+    <button id="dlgClose">Close</button>
+  </div>
+  <div class="dlg-bar">
+    <div class="seg" id="dlgSeg" role="group" aria-label="Export format">
+      <button data-fmt="table" aria-pressed="true">Table</button>
+      <button data-fmt="python" aria-pressed="false">Python</button>
+      <button data-fmt="r" aria-pressed="false">R</button>
+      <button data-fmt="json" aria-pressed="false">JSON</button>
+      <button data-fmt="csv" aria-pressed="false">CSV</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="dlgAll"> All 256 harmonics</label>
+  </div>
+  <div class="dlg-body" id="dlgBody"></div>
+  <div class="dlg-foot">
+    <span id="dlgUnits"></span>
+    <button id="dlgCopy">Copy</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Fourier Plotter
+   Every axis a gets its own sine series:
+       a(t) = A0 + sum_k  A_k * sin(2*pi*k*t + p_k),   t in [0,1)
+   A chain of rotating vectors realises one series; the chain's
+   component along its own axis is that axis's value.
+   Analysis happens in MODEL units (shape scaled to a 200-unit
+   box, centred on the origin) so exported numbers never depend
+   on window size.
+   ============================================================ */
+
+const N = 512, HALF = N >> 1, TRACE_RES = 900;
+const MODEL_R = 100;                       // shape half-extent, model units
+const GAP2D = 165, VIEW2D = 430, VIEW_CX = -82.5, VIEW_CY = 82.5;
+const GAP3D = 152, BOXR = 112;
+const HN = 257;                            // height-profile bins
+const ZR = 150;                            // height panel range, model units
+
+const COL = {paper:"#E6E7DE", ink:"#171D19", inkFaint:"#8B9086"};
+const AXCOL  = {x:"#B4322A", y:"#1E4F8A", z:"#3F6B33", a:"#6B3FA0"};
+const AXDESC = {1:{a:"amplitude"}, 2:{x:"sideways", y:"up & down"}, 3:{x:"sideways", y:"depth", z:"height"}};
+const SND_ANCHOR = -180, WAVE_X0 = -118, WAVE_X1 = 192;
+
+/* ============================================================
+   Generic geometry
+   ============================================================ */
+
+function boundsOf(pts, keys){
+  const min = {}, max = {};
+  for(const k of keys){ min[k] = Infinity; max[k] = -Infinity; }
+  for(const p of pts) for(const k of keys){
+    if(p[k] < min[k]) min[k] = p[k];
+    if(p[k] > max[k]) max[k] = p[k];
+  }
+  let sq = 0;
+  for(const k of keys) sq += Math.pow(max[k]-min[k], 2);
+  return {min, max, diag: Math.sqrt(sq)};
+}
+
+function gap(a, b, keys){
+  let s = 0;
+  for(const k of keys){ const d = a[k]-b[k]; s += d*d; }
+  return Math.sqrt(s);
+}
+
+function resampleClosed(pts, count, keys){
+  const p = [];
+  for(const q of pts){
+    const last = p[p.length-1];
+    if(!last || gap(q, last, keys) > 1e-9) p.push(q);
+  }
+  if(p.length < 3) return null;
+  const loop = p.concat([p[0]]);
+  const cum = [0];
+  for(let i=1;i<loop.length;i++) cum.push(cum[i-1] + gap(loop[i], loop[i-1], keys));
+  const total = cum[cum.length-1];
+  if(!(total > 0)) return null;
+
+  const out = new Array(count);
+  let j = 0;
+  for(let i=0;i<count;i++){
+    const d = total*i/count;
+    while(j < cum.length-2 && cum[j+1] < d) j++;
+    const seg = cum[j+1]-cum[j];
+    const f = seg > 0 ? (d-cum[j])/seg : 0;
+    const q = {};
+    for(const k of keys) q[k] = loop[j][k] + (loop[j+1][k]-loop[j][k])*f;
+    out[i] = q;
+  }
+  return out;
+}
+
+function smoothClosed(pts, passes, keys){
+  let cur = pts;
+  for(let s=0;s<passes;s++){
+    const n = cur.length, next = new Array(n);
+    for(let i=0;i<n;i++){
+      const a = cur[(i-1+n)%n], b = cur[i], c = cur[(i+1)%n], q = {};
+      for(const k of keys) q[k] = (a[k] + 2*b[k] + c[k])/4;
+      next[i] = q;
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+/** Scale about the centre so the longest side spans 2R, keeping proportions. */
+function fitToBox(pts, keys, R){
+  const b = boundsOf(pts, keys);
+  let widest = 0;
+  for(const k of keys) widest = Math.max(widest, b.max[k]-b.min[k]);
+  const s = widest > 1e-9 ? (2*R)/widest : 1;
+  return pts.map(p => {
+    const q = {};
+    for(const k of keys) q[k] = (p[k] - (b.min[k]+b.max[k])/2)*s;
+    return q;
+  });
+}
+
+/* ============================================================
+   DFT -> sine series
+   ============================================================ */
+
+function series(values){
+  const n = values.length, half = n>>1;
+  let dc = 0;
+  for(let i=0;i<n;i++) dc += values[i];
+  dc /= n;
+
+  const terms = [];
+  for(let k=1;k<=half;k++){
+    let re = 0, im = 0;
+    const step = -2*Math.PI*k/n;
+    for(let i=0;i<n;i++){
+      const a = step*i;
+      re += values[i]*Math.cos(a);
+      im += values[i]*Math.sin(a);
+    }
+    re /= n; im /= n;
+    let amp, phase;
+    if(k === half && n % 2 === 0){
+      amp = Math.abs(re);
+      phase = (re >= 0 ? 0 : Math.PI) + Math.PI/2;
+    }else{
+      amp = 2*Math.hypot(re, im);
+      phase = Math.atan2(im, re) + Math.PI/2;
+    }
+    phase = Math.atan2(Math.sin(phase), Math.cos(phase));
+    terms.push({k, amp, phase});
+  }
+  return {dc, terms, byAmp: terms.slice().sort((a,b)=>b.amp-a.amp)};
+}
+
+function activeTerms(sig){
+  return state.sortByAmp ? sig.byAmp.slice(0, state.harmonics)
+                         : sig.terms.slice(0, state.harmonics);
+}
+
+function evaluate(sig, terms, t){
+  let v = sig.dc;
+  const w = 2*Math.PI*t;
+  for(let i=0;i<terms.length;i++){
+    const tm = terms[i];
+    v += tm.amp*Math.sin(w*tm.k + tm.phase);
+  }
+  return v;
+}
+
+/* ============================================================
+   Rigs
+   ============================================================ */
+
+function makeRig(keys){
+  return {keys, path:null, samples:{}, series:{}, terms:{}, trace:null, rms:0, span:1, ready:false};
+}
+
+function analyseRig(rig, path){
+  rig.path = path;
+  for(const k of rig.keys){
+    rig.samples[k] = path.map(p=>p[k]);
+    rig.series[k] = series(rig.samples[k]);
+  }
+  rig.span = Math.max(boundsOf(path, rig.keys).diag, 1);
+  rig.ready = true;
+  rebuild(rig);
+}
+
+function rebuild(rig){
+  if(!rig || !rig.ready) return;
+  for(const k of rig.keys) rig.terms[k] = activeTerms(rig.series[k]);
+
+  const tr = new Array(TRACE_RES+1);
+  for(let i=0;i<=TRACE_RES;i++){
+    const t = i/TRACE_RES, p = {};
+    for(const k of rig.keys) p[k] = evaluate(rig.series[k], rig.terms[k], t);
+    tr[i] = p;
+  }
+  rig.trace = tr;
+
+  let s = 0;
+  for(let i=0;i<N;i++){
+    const t = i/N;
+    for(const k of rig.keys){
+      const d = evaluate(rig.series[k], rig.terms[k], t) - rig.path[i][k];
+      s += d*d;
+    }
+  }
+  rig.rms = Math.sqrt(s/N);
+  buildScan(rig);
+  updateReadouts();
+}
+
+/* A closed curve is not a function of x: a vertical line generally meets it in
+   an even number of places. For each column we record every one of them. */
+function buildScan(rig){
+  rig.scan = null;
+  if(!rig.trace || rig.keys.indexOf("x") < 0) return;
+  let lo = Infinity, hi = -Infinity;
+  for(const p of rig.trace){ if(p.x < lo) lo = p.x; if(p.x > hi) hi = p.x; }
+  if(!(hi > lo)) return;
+
+  const cols = state.scanCols, out = new Array(cols);
+  for(let c=0;c<cols;c++){
+    const X = lo + (hi-lo)*(c+0.5)/cols;
+    const hits = [];
+    for(let i=0;i<rig.trace.length-1;i++){
+      const a = rig.trace[i], b = rig.trace[i+1];
+      if((a.x <= X && b.x > X) || (b.x <= X && a.x > X)){
+        const f = (X-a.x)/(b.x-a.x), p = {t:(i+f)/TRACE_RES};
+        for(const k of rig.keys) p[k] = a[k] + (b[k]-a[k])*f;
+        hits.push(p);
+      }
+    }
+    hits.sort((m,n) => n.y-m.y);
+    out[c] = {X, hits};
+  }
+  rig.scan = out;
+}
+
+/* The x stack still drives the line while scanning: its tip must land on the
+   current column. Several t give the same x, so follow whichever crossing stays
+   nearest the one used last frame - the arms then move smoothly instead of
+   snapping between branches. */
+function updateScanTau(sc){
+  const hits = sc.col.hits;
+  if(!hits.length) return;
+  if(sc.ci < state.scanPrevCol) state.scanTau = hits[0].t;
+  state.scanPrevCol = sc.ci;
+  let best = hits[0], bd = Infinity;
+  for(const h of hits){
+    const raw = Math.abs(h.t - state.scanTau);
+    const d = Math.min(raw, 1-raw);
+    if(d < bd){ bd = d; best = h; }
+  }
+  state.scanTau = best.t;
+}
+
+function scanState(rig){
+  if(state.mode !== "scan" || !rig.scan || !rig.scan.length) return null;
+  const cols = rig.scan.length;
+  const ci = Math.min(cols-1, Math.max(0, Math.floor(state.t*cols)));
+  return {ci, cols, col: rig.scan[ci]};
+}
+
+function dots(ctx, list, r){
+  ctx.beginPath();
+  for(const q of list){ ctx.moveTo(q.x+r, q.y); ctx.arc(q.x, q.y, r, 0, Math.PI*2); }
+  ctx.fill();
+}
+
+/* ============================================================
+   State
+   ============================================================ */
+
+const state = {
+  tab: "2d",
+  mode: "trace",            // "trace" = follow the curve; "scan" = sweep x, dot every y
+  scanCols: 110,
+  scanTau: 0,               // where the x stack is posed while scanning
+  scanPrevCol: 0,
+  harmonics: 16,
+  sortByAmp: false,
+  speed: 1,
+  t: 0,
+  playing: true,
+  showCircles: true,
+  showGhost: true,
+  seam: true,
+  scrubbing: false,
+
+  d2: {rig: makeRig(["x","y"]), strokes: [], active: null, drawing: false},
+  d3: {rig: makeRig(["x","y","z"]), strokes: [], active: null,
+       height: new Float64Array(HN), heightDrawn: false, lastH: null},
+
+  snd: {rig: makeRig(["a"]), samples: null, rate: 44100, start: 0, len: 512,
+        name: "", recording: false, peak: 1},
+  img: {rig: makeRig(["x","y"]), src: null, iw: 0, ih: 0, data: null,
+        thresh: 18, invert: false, showPhoto: true, photo: null, contour: null, name: "",
+        fix: "pan", brush: 14, paint: null, paintCv: null,
+        strokes: [], active: null, cursor: null},
+
+  cam: {az:-0.62, el:0.40, zoom:1, dist:900}
+};
+
+const RIGS = () => ({"2d": state.d2.rig, "3d": state.d3.rig, snd: state.snd.rig, img: state.img.rig});
+const current = () => RIGS()[state.tab];
+
+/* ---------- pan / zoom, one viewport per flat panel ---------- */
+const mkVP = (base, cx, cy) => ({base, home:{cx, cy}, cx, cy, zoom:1});
+const vps = {
+  "2d": mkVP(VIEW2D, VIEW_CX, VIEW_CY),
+  img:  mkVP(VIEW2D, VIEW_CX, VIEW_CY),
+  snd:  mkVP(540, 20, 0)
+};
+function mapping(vp, w, h){
+  const s = Math.min(w,h)/vp.base*vp.zoom;
+  return {s, cx: w/2 - vp.cx*s, cy: h/2 + vp.cy*s};
+}
+function resetView(){
+  if(state.tab === "3d"){ state.cam.zoom = 1; state.cam.az = -0.62; state.cam.el = 0.40; }
+  else { const vp = vps[state.tab]; vp.zoom = 1; vp.cx = vp.home.cx; vp.cy = vp.home.cy; }
+  syncZoom();
+}
+
+/* ============================================================
+   Canvas plumbing
+   ============================================================ */
+
+const surfaces = new WeakMap();
+function surface(cv){
+  let s = surfaces.get(cv);
+  if(!s){ s = {ctx: cv.getContext("2d")}; surfaces.set(cv, s); }
+  const r = cv.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+  if(s.w !== w || s.h !== h || s.dpr !== dpr){
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+    s.w = w; s.h = h; s.dpr = dpr;
+  }
+  s.ctx.setTransform(dpr,0,0,dpr,0,0);
+  return s;
+}
+
+function paper(ctx, w, h){
+  ctx.fillStyle = COL.paper;
+  ctx.fillRect(0,0,w,h);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(23,29,25,0.055)";
+  ctx.beginPath();
+  for(let x=0;x<=w;x+=10){ ctx.moveTo(x+0.5,0); ctx.lineTo(x+0.5,h); }
+  for(let y=0;y<=h;y+=10){ ctx.moveTo(0,y+0.5); ctx.lineTo(w,y+0.5); }
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(23,29,25,0.11)";
+  ctx.beginPath();
+  for(let x=0;x<=w;x+=50){ ctx.moveTo(x+0.5,0); ctx.lineTo(x+0.5,h); }
+  for(let y=0;y<=h;y+=50){ ctx.moveTo(0,y+0.5); ctx.lineTo(w,y+0.5); }
+  ctx.stroke();
+}
+
+function poly(ctx, pts, closed){
+  if(!pts || pts.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+  if(closed) ctx.closePath();
+  ctx.stroke();
+}
+
+const bodyFont = () => getComputedStyle(document.body).fontFamily;
+
+/* ============================================================
+   2D bed
+   ============================================================ */
+
+const bed = document.getElementById("bed");
+
+function view2(w,h){ return mapping(vps[state.tab === "img" ? "img" : "2d"], w, h); }
+const toScreen2 = (p,v) => ({x: v.cx + p.x*v.s, y: v.cy - p.y*v.s});
+const toModel2  = (sx,sy,v) => ({x: (sx-v.cx)/v.s, y: (v.cy-sy)/v.s});
+
+function analyse2(){
+  const d = state.d2;
+  const raw = [];
+  for(const st of d.strokes) for(const p of st) raw.push(p);
+  if(raw.length < 3){ d.rig.ready = false; d.rig.path = null; updateReadouts(); return false; }
+  let path = resampleClosed(raw, N, ["x","y"]);
+  if(!path) return false;
+  path = fitToBox(smoothClosed(path, 2, ["x","y"]), ["x","y"], MODEL_R);
+  analyseRig(d.rig, path);
+  return true;
+}
+
+/** One chain of rotating vectors, in model space. Returns the tip. */
+function chain2(ctx, v, ax, ay, terms, t, quarter, colour){
+  let px = ax, py = ay;
+  const w = 2*Math.PI*t;
+  for(let i=0;i<terms.length;i++){
+    const tm = terms[i];
+    const a = w*tm.k + tm.phase + quarter;
+    const nx = px + tm.amp*Math.cos(a), ny = py + tm.amp*Math.sin(a);
+    if(state.showCircles && tm.amp*v.s > 0.7){
+      const c = toScreen2({x:px,y:py}, v), e = toScreen2({x:nx,y:ny}, v);
+      ctx.strokeStyle = colour + "26";
+      ctx.beginPath(); ctx.arc(c.x, c.y, tm.amp*v.s, 0, Math.PI*2); ctx.stroke();
+      ctx.strokeStyle = colour + "80";
+      ctx.beginPath(); ctx.moveTo(c.x,c.y); ctx.lineTo(e.x,e.y); ctx.stroke();
+    }
+    px = nx; py = ny;
+  }
+  return {x:px, y:py};
+}
+
+function drawBed(){
+  const s = surface(bed), ctx = s.ctx;
+  paper(ctx, s.w, s.h);
+  const v = view2(s.w, s.h);
+  const d = state.d2, rig = d.rig;
+
+  if(d.drawing || !rig.ready){
+    ctx.save();
+    ctx.setLineDash([3,5]);
+    ctx.strokeStyle = "rgba(23,29,25,0.20)";
+    ctx.lineWidth = 1;
+    const a = toScreen2({x:-MODEL_R,y:MODEL_R}, v), b = toScreen2({x:MODEL_R,y:-MODEL_R}, v);
+    ctx.strokeRect(a.x, a.y, b.x-a.x, b.y-a.y);
+    ctx.restore();
+
+    ctx.strokeStyle = COL.ink; ctx.lineWidth = 2.2;
+    ctx.lineJoin = ctx.lineCap = "round";
+    for(const st of d.strokes) poly(ctx, st.map(p=>toScreen2(p,v)), false);
+    if(d.active) poly(ctx, d.active.map(p=>toScreen2(p,v)), false);
+
+    if(!d.strokes.length && !d.active){
+      const c = toScreen2({x:0,y:0}, v);
+      ctx.fillStyle = COL.inkFaint; ctx.textAlign = "center";
+      ctx.font = "500 13px " + bodyFont();
+      ctx.fillText("Draw a closed shape inside the frame", c.x, c.y-8);
+      ctx.font = "400 11px " + bodyFont();
+      ctx.fillText("the ends get joined automatically", c.x, c.y+12);
+    }
+    return;
+  }
+
+  drawPlanarRig(ctx, s, v, rig);
+}
+
+/* The planar half of the instrument: two stacks, guides, ink. Shared by the
+   drawn tab and the traced-image tab, which differ only in where the path came from. */
+function drawPlanarRig(ctx, s, v, rig){
+  const t = state.t, tx = rig.terms.x, ty = rig.terms.y;
+
+  ctx.lineJoin = ctx.lineCap = "round";
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = "rgba(23,29,25,0.16)";
+  poly(ctx, rig.path.map(p=>toScreen2(p,v)), true);
+
+  if(state.showGhost && rig.trace){
+    ctx.save(); ctx.setLineDash([2,4]);
+    ctx.strokeStyle = "rgba(23,29,25,0.28)"; ctx.lineWidth = 1;
+    poly(ctx, rig.trace.map(p=>toScreen2(p,v)), false);
+    ctx.restore();
+  }
+
+  const sc = scanState(rig);
+  if(sc){
+    ctx.fillStyle = "rgba(23,29,25,0.70)";
+    const laid = [];
+    for(let c=0;c<sc.ci;c++) for(const p of rig.scan[c].hits) laid.push(toScreen2(p, v));
+    dots(ctx, laid, 1.7);
+
+    ctx.lineWidth = 1;
+    const sTip = toScreen2(
+      chain2(ctx, v, rig.series.x.dc, GAP2D, tx, state.scanTau, -Math.PI/2, AXCOL.x), v);
+    ctx.save(); ctx.setLineDash([3,3]);
+    ctx.strokeStyle = AXCOL.x + "99"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(sTip.x, sTip.y); ctx.lineTo(sTip.x, s.h); ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = AXCOL.x;
+    dots(ctx, sc.col.hits.map(p => toScreen2(p, v)), 3.4);
+    ctx.fillStyle = COL.inkFaint; ctx.font = "500 9.5px " + bodyFont(); ctx.textAlign = "left";
+    ctx.fillText("x", 6, toScreen2({x:0, y:GAP2D}, v).y - 5);
+    return;
+  }
+
+  ctx.lineWidth = 1;
+  const tipH = chain2(ctx, v, rig.series.x.dc, GAP2D, tx, t, -Math.PI/2, AXCOL.x);
+  const tipV = chain2(ctx, v, -GAP2D, rig.series.y.dc, ty, t, 0, AXCOL.y);
+  const pen  = toScreen2({x:tipH.x, y:tipV.y}, v);
+  const sh = toScreen2(tipH, v), sv = toScreen2(tipV, v);
+
+  ctx.save(); ctx.setLineDash([4,4]); ctx.lineWidth = 1;
+  ctx.strokeStyle = AXCOL.x + "55";
+  ctx.beginPath(); ctx.moveTo(sh.x, sh.y); ctx.lineTo(sh.x, s.h); ctx.stroke();
+  ctx.strokeStyle = AXCOL.y + "55";
+  ctx.beginPath(); ctx.moveTo(sv.x, sv.y); ctx.lineTo(s.w, sv.y); ctx.stroke();
+  ctx.restore();
+
+  if(rig.trace){
+    const upto = Math.max(1, Math.round(t*TRACE_RES));
+    ctx.strokeStyle = COL.ink; ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    const p0 = toScreen2(rig.trace[0], v);
+    ctx.moveTo(p0.x, p0.y);
+    for(let i=1;i<=upto;i++){ const q = toScreen2(rig.trace[i], v); ctx.lineTo(q.x,q.y); }
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = COL.ink;
+  ctx.beginPath(); ctx.arc(pen.x, pen.y, 3.6, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = COL.paper; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(pen.x, pen.y, 5.6, 0, Math.PI*2); ctx.stroke();
+
+  ctx.fillStyle = COL.inkFaint; ctx.font = "500 9.5px " + bodyFont(); ctx.textAlign = "left";
+  ctx.fillText("x", 6, toScreen2({x:0,y:GAP2D}, v).y - 5);
+  ctx.fillText("y", toScreen2({x:-GAP2D,y:0}, v).x + 7, 12);
+}
+
+/* ============================================================
+   3D: plan panel, height panel, viewport
+   ============================================================ */
+
+const planC = document.getElementById("plan");
+const heightC = document.getElementById("height");
+const view3C = document.getElementById("view3d");
+
+function viewPlan(w,h){
+  const s = Math.min(w,h)/(2*MODEL_R + 60);
+  return {s, cx:w/2, cy:h/2};
+}
+
+function heightAt(t){
+  const d = state.d3;
+  const u = Math.min(0.999999, Math.max(0, t))*(HN-1);
+  const i = Math.floor(u), f = u-i;
+  const a = d.height[i], b = d.height[Math.min(HN-1, i+1)];
+  let z = a + (b-a)*f;
+  if(state.seam) z -= (d.height[HN-1]-d.height[0])*t;
+  return z;
+}
+
+function analyse3(){
+  const d = state.d3;
+  const raw = [];
+  for(const st of d.strokes) for(const p of st) raw.push(p);
+  if(raw.length < 3){ d.rig.ready = false; d.rig.path = null; updateReadouts(); return false; }
+  let plan = resampleClosed(raw, N, ["x","y"]);
+  if(!plan) return false;
+  plan = smoothClosed(plan, 2, ["x","y"]);
+  const path = plan.map((p,i) => ({x:p.x, y:p.y, z: heightAt(i/N)}));
+  analyseRig(d.rig, fitToBox(path, ["x","y","z"], MODEL_R));
+  return true;
+}
+
+function project(p, w, h){
+  const cam = state.cam;
+  const ca = Math.cos(cam.az), sa = Math.sin(cam.az);
+  const X  = p.x*ca - p.y*sa;
+  const Yr = p.x*sa + p.y*ca;
+  const ce = Math.cos(cam.el), se = Math.sin(cam.el);
+  const Y2 = Yr*ce - p.z*se;
+  const Z2 = Yr*se + p.z*ce;
+  const d  = Math.max(cam.dist + Y2, 80);
+  const k  = (cam.zoom*Math.min(w,h)*1.75)/d;
+  return {x: w/2 + X*k, y: h/2 - Z2*k, d};
+}
+
+function seg3(ctx, a, b, w, h){
+  const p = project(a,w,h), q = project(b,w,h);
+  ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y);
+}
+
+/* u is the axis the chain reports on: the component along u is amp*sin(2*pi*k*t + phase). */
+const AXIS_SPEC = {
+  x: {u:{x:1,y:0,z:0}, v:{x:0,y:1,z:0}, quarter:-Math.PI/2, anchor:dc=>({x:dc, y:0, z:GAP3D})},
+  y: {u:{x:0,y:1,z:0}, v:{x:0,y:0,z:1}, quarter:-Math.PI/2, anchor:dc=>({x:-GAP3D, y:dc, z:0})},
+  z: {u:{x:0,y:0,z:1}, v:{x:1,y:0,z:0}, quarter:-Math.PI/2, anchor:dc=>({x:0, y:GAP3D, z:dc})}
+};
+
+function chain3(ctx, w, h, anchor, terms, t, spec, colour){
+  let cur = {x:anchor.x, y:anchor.y, z:anchor.z};
+  const wt = 2*Math.PI*t;
+  const pts = [project(cur,w,h)];
+  const rings = [];
+  for(let i=0;i<terms.length;i++){
+    const tm = terms[i];
+    const a = wt*tm.k + tm.phase + spec.quarter;
+    const c = Math.cos(a), s = Math.sin(a);
+    if(state.showCircles && rings.length < 44 && tm.amp > 1.4) rings.push({c:cur, r:tm.amp});
+    cur = {
+      x: cur.x + tm.amp*(spec.u.x*c + spec.v.x*s),
+      y: cur.y + tm.amp*(spec.u.y*c + spec.v.y*s),
+      z: cur.z + tm.amp*(spec.u.z*c + spec.v.z*s)
+    };
+    pts.push(project(cur,w,h));
+  }
+
+  if(rings.length){
+    ctx.strokeStyle = colour + "22";
+    ctx.beginPath();
+    for(const ring of rings){
+      for(let i=0;i<=30;i++){
+        const a = i/30*Math.PI*2, c = Math.cos(a), s = Math.sin(a);
+        const q = project({
+          x: ring.c.x + ring.r*(spec.u.x*c + spec.v.x*s),
+          y: ring.c.y + ring.r*(spec.u.y*c + spec.v.y*s),
+          z: ring.c.z + ring.r*(spec.u.z*c + spec.v.z*s)
+        }, w, h);
+        i ? ctx.lineTo(q.x,q.y) : ctx.moveTo(q.x,q.y);
+      }
+    }
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = colour + "85";
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+  return cur;
+}
+
+function drawView3(){
+  const s = surface(view3C), ctx = s.ctx, w = s.w, h = s.h;
+  paper(ctx, w, h);
+  const rig = state.d3.rig;
+
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(23,29,25,0.13)";
+  ctx.beginPath();
+  for(let i=-2;i<=2;i++){
+    const u = i*BOXR/2;
+    seg3(ctx, {x:u,y:-BOXR,z:-BOXR}, {x:u,y:BOXR,z:-BOXR}, w, h);
+    seg3(ctx, {x:-BOXR,y:u,z:-BOXR}, {x:BOXR,y:u,z:-BOXR}, w, h);
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(23,29,25,0.22)";
+  ctx.beginPath();
+  const C = [-BOXR, BOXR];
+  for(const a of C) for(const b of C){
+    seg3(ctx, {x:a,y:b,z:-BOXR}, {x:a,y:b,z:BOXR}, w, h);
+    seg3(ctx, {x:a,y:-BOXR,z:b}, {x:a,y:BOXR,z:b}, w, h);
+    seg3(ctx, {x:-BOXR,y:a,z:b}, {x:BOXR,y:a,z:b}, w, h);
+  }
+  ctx.stroke();
+
+  if(!rig.ready){
+    ctx.fillStyle = COL.inkFaint; ctx.textAlign = "center";
+    ctx.font = "500 13px " + bodyFont();
+    ctx.fillText("Draw a loop in the plan view below", w/2, h/2 - 6);
+    ctx.font = "400 11px " + bodyFont();
+    ctx.fillText("then draw its height, or load a shape", w/2, h/2 + 14);
+    return;
+  }
+
+  const t = state.t, pen = {};
+  for(const k of rig.keys) pen[k] = evaluate(rig.series[k], rig.terms[k], t);
+
+  ctx.lineWidth = 1.3;
+  ctx.strokeStyle = "rgba(23,29,25,0.17)";
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const q = project(rig.path[i%N], w, h);
+    i ? ctx.lineTo(q.x,q.y) : ctx.moveTo(q.x,q.y);
+  }
+  ctx.stroke();
+
+  if(state.showGhost && rig.trace){
+    ctx.save(); ctx.setLineDash([2,4]); ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(23,29,25,0.26)";
+    ctx.beginPath();
+    for(let i=0;i<rig.trace.length;i++){
+      const q = project(rig.trace[i], w, h);
+      i ? ctx.lineTo(q.x,q.y) : ctx.moveTo(q.x,q.y);
+    }
+    ctx.stroke(); ctx.restore();
+  }
+
+  const sc = scanState(rig);
+  if(sc){
+    ctx.fillStyle = "rgba(23,29,25,0.62)";
+    const laid = [];
+    for(let c=0;c<sc.ci;c++) for(const p of rig.scan[c].hits) laid.push(project(p, w, h));
+    dots(ctx, laid, 1.7);
+
+    ctx.save(); ctx.setLineDash([3,3]);
+    ctx.strokeStyle = AXCOL.x + "88"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    const X = sc.col.X, corners = [[-BOXR,-BOXR],[BOXR,-BOXR],[BOXR,BOXR],[-BOXR,BOXR]];
+    for(let i=0;i<4;i++){
+      const a = corners[i], b = corners[(i+1)%4];
+      seg3(ctx, {x:X, y:a[0], z:a[1]}, {x:X, y:b[0], z:b[1]}, w, h);
+    }
+    ctx.stroke(); ctx.restore();
+
+    ctx.lineWidth = 1;
+    chain3(ctx, w, h, AXIS_SPEC.x.anchor(rig.series.x.dc), rig.terms.x,
+           state.scanTau, AXIS_SPEC.x, AXCOL.x);
+
+    ctx.fillStyle = AXCOL.x;
+    dots(ctx, sc.col.hits.map(p => project(p, w, h)), 3.6);
+    return;
+  }
+
+  const tips = {};
+  for(const k of rig.keys){
+    const spec = AXIS_SPEC[k];
+    tips[k] = chain3(ctx, w, h, spec.anchor(rig.series[k].dc), rig.terms[k], t, spec, AXCOL[k]);
+  }
+
+  ctx.save(); ctx.setLineDash([4,4]); ctx.lineWidth = 1;
+  const legs = {
+    x: [tips.x, {x:pen.x, y:pen.y, z:GAP3D}, pen],
+    y: [tips.y, {x:-GAP3D, y:pen.y, z:pen.z}, pen],
+    z: [tips.z, {x:pen.x, y:GAP3D, z:pen.z}, pen]
+  };
+  for(const k of rig.keys){
+    ctx.strokeStyle = AXCOL[k] + "4D";
+    ctx.beginPath();
+    seg3(ctx, legs[k][0], legs[k][1], w, h);
+    seg3(ctx, legs[k][1], legs[k][2], w, h);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  if(rig.trace){
+    const upto = Math.max(1, Math.round(t*TRACE_RES));
+    const pr = new Array(upto+1);
+    for(let i=0;i<=upto;i++) pr[i] = project(rig.trace[i], w, h);
+    for(const pass of [0,1]){
+      ctx.strokeStyle = pass ? COL.ink : "rgba(23,29,25,0.40)";
+      ctx.lineWidth = pass ? 2.3 : 1.6;
+      ctx.beginPath();
+      for(let i=1;i<=upto;i++){
+        const back = (pr[i-1].d + pr[i].d)/2 > state.cam.dist;
+        if(back === !pass){ ctx.moveTo(pr[i-1].x, pr[i-1].y); ctx.lineTo(pr[i].x, pr[i].y); }
+      }
+      ctx.stroke();
+    }
+  }
+
+  const pp = project(pen, w, h);
+  ctx.fillStyle = COL.ink;
+  ctx.beginPath(); ctx.arc(pp.x, pp.y, 3.8, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = COL.paper; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(pp.x, pp.y, 5.8, 0, Math.PI*2); ctx.stroke();
+
+  ctx.font = "600 10px " + bodyFont(); ctx.textAlign = "center";
+  for(const k of rig.keys){
+    const q = project(AXIS_SPEC[k].anchor(rig.series[k].dc), w, h);
+    ctx.fillStyle = AXCOL[k];
+    ctx.fillText(k, q.x, q.y - 9);
+  }
+}
+
+function drawPlan(){
+  const s = surface(planC), ctx = s.ctx;
+  paper(ctx, s.w, s.h);
+  const v = viewPlan(s.w, s.h);
+  const d = state.d3;
+  const T = p => ({x: v.cx + p.x*v.s, y: v.cy - p.y*v.s});
+
+  ctx.save(); ctx.setLineDash([3,5]);
+  ctx.strokeStyle = "rgba(23,29,25,0.18)"; ctx.lineWidth = 1;
+  const a = T({x:-MODEL_R,y:MODEL_R}), b = T({x:MODEL_R,y:-MODEL_R});
+  ctx.strokeRect(a.x, a.y, b.x-a.x, b.y-a.y);
+  ctx.restore();
+
+  ctx.strokeStyle = COL.ink; ctx.lineWidth = 2;
+  ctx.lineJoin = ctx.lineCap = "round";
+  for(const st of d.strokes) poly(ctx, st.map(T), false);
+  if(d.active) poly(ctx, d.active.map(T), false);
+
+  if(d.rig.ready && d.strokes.length){
+    const q = T({x: evaluate(d.rig.series.x, d.rig.terms.x, state.t),
+                 y: evaluate(d.rig.series.y, d.rig.terms.y, state.t)});
+    ctx.fillStyle = COL.ink;
+    ctx.beginPath(); ctx.arc(q.x, q.y, 3, 0, Math.PI*2); ctx.fill();
+  }
+  if(!d.strokes.length && !d.active){
+    ctx.fillStyle = COL.inkFaint; ctx.textAlign = "center";
+    ctx.font = "400 11px " + bodyFont();
+    ctx.fillText("draw the loop seen from above", s.w/2, s.h/2);
+  }
+}
+
+function drawHeight(){
+  const s = surface(heightC), ctx = s.ctx;
+  paper(ctx, s.w, s.h);
+  const padL = 10, padR = 10, padT = 12, padB = 16;
+  const iw = s.w-padL-padR, ih = s.h-padT-padB, mid = padT+ih/2;
+  const d = state.d3;
+  const X = t => padL + iw*t;
+  const Y = z => mid - z*(ih/2)/ZR;
+
+  ctx.strokeStyle = "rgba(23,29,25,0.26)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(padL, mid+0.5); ctx.lineTo(padL+iw, mid+0.5); ctx.stroke();
+
+  ctx.strokeStyle = AXCOL.z; ctx.lineWidth = 2;
+  ctx.lineJoin = ctx.lineCap = "round";
+  ctx.beginPath();
+  for(let i=0;i<HN;i++){
+    const t = i/(HN-1);
+    const py = Y(state.seam ? d.height[i]-(d.height[HN-1]-d.height[0])*t : d.height[i]);
+    i ? ctx.lineTo(X(t),py) : ctx.moveTo(X(t),py);
+  }
+  ctx.stroke();
+
+  if(d.rig.ready){
+    const hx = X(state.t);
+    ctx.strokeStyle = "rgba(23,29,25,0.45)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, padT+ih); ctx.stroke();
+    ctx.fillStyle = COL.ink;
+    ctx.beginPath(); ctx.arc(hx, Y(heightAt(state.t)), 3, 0, Math.PI*2); ctx.fill();
+  }
+
+  ctx.fillStyle = COL.inkFaint; ctx.font = "400 9.5px " + bodyFont();
+  ctx.textAlign = "left";  ctx.fillText("t = 0", padL, s.h-4);
+  ctx.textAlign = "right"; ctx.fillText("t = 1", padL+iw, s.h-4);
+  if(!d.heightDrawn){
+    ctx.textAlign = "center";
+    ctx.fillText("flat \u2014 drag to give the loop some height", padL+iw/2, mid-10);
+  }
+}
+
+/* ============================================================
+   Sound: find the repeating cycle, then treat it as one axis
+   ============================================================ */
+
+/** Normalised autocorrelation with octave correction.
+    Autocorrelation scores just as highly at 2x or 3x the true period, so after
+    finding the strongest lag we look for the shortest sub-multiple that scores
+    nearly as well, then interpolate the peak for a fractional period. */
+function detectPeriod(sam, from, rate){
+  const minLag = Math.max(2, Math.floor(rate/1200));
+  const maxLag = Math.min(Math.floor(rate/40), Math.floor((sam.length-from)/2));
+  if(maxLag <= minLag+2) return null;
+  const W = maxLag;
+  const score = new Float64Array(maxLag+2);
+
+  for(let lag=minLag; lag<=maxLag; lag++){
+    let num = 0, den = 0;
+    for(let i=0;i<W;i++){
+      const u = sam[from+i], v = sam[from+i+lag];
+      num += u*v; den += u*u + v*v;
+    }
+    score[lag] = den > 0 ? 2*num/den : 0;
+  }
+
+  let best = minLag, peak = -Infinity;
+  for(let lag=minLag; lag<=maxLag; lag++) if(score[lag] > peak){ peak = score[lag]; best = lag; }
+  if(peak <= 0.25) return null;
+
+  for(let d=8; d>=2; d--){
+    let cand = Math.round(best/d);
+    if(cand < minLag) continue;
+    for(let j=Math.max(minLag, cand-2); j<=Math.min(maxLag, cand+2); j++)
+      if(score[j] > score[cand]) cand = j;
+    if(score[cand] >= peak*0.85){ best = cand; break; }
+  }
+
+  const a = score[best-1], b = score[best], c = score[best+1];
+  const den = a - 2*b + c;
+  const shift = (best > minLag && best < maxLag && Math.abs(den) > 1e-12)
+    ? 0.5*(a-c)/den : 0;
+  return best + Math.max(-0.5, Math.min(0.5, shift));
+}
+
+/** The loudest stretch is the most useful place to look for a cycle. */
+function loudestAt(sam, win){
+  let best = 0, bestE = -1;
+  for(let i=0;i+win<=sam.length;i+=Math.max(1, win>>2)){
+    let e = 0;
+    for(let j=0;j<win;j+=4) e += sam[i+j]*sam[i+j];
+    if(e > bestE){ bestE = e; best = i; }
+  }
+  return best;
+}
+
+function sampleAt(sam, u){
+  const j = Math.floor(u), f = u-j;
+  const a = sam[Math.max(0, Math.min(sam.length-1, j))];
+  const b = sam[Math.max(0, Math.min(sam.length-1, j+1))];
+  return a + (b-a)*f;
+}
+
+function loadSound(samples, rate, name){
+  const d = state.snd;
+  d.samples = samples; d.rate = rate; d.name = name;
+  const probe = loudestAt(samples, Math.min(samples.length, Math.floor(rate*0.05)));
+  const period = detectPeriod(samples, probe, rate);
+  d.start = probe;
+  d.len = period || Math.min(1024, Math.max(64, Math.floor(samples.length/8)));
+  analyseSnd();
+}
+
+function analyseSnd(){
+  const d = state.snd;
+  if(!d.samples || d.len < 8){ d.rig.ready = false; updateReadouts(); return false; }
+  d.start = Math.max(0, Math.min(d.start, d.samples.length - d.len));
+  const vals = new Array(N), step = d.len/N;
+  if(step > 1.5){
+    // more samples than points: average each bucket rather than picking one,
+    // otherwise a long window aliases into a pattern that was never there
+    for(let i=0;i<N;i++){
+      const u0 = d.start + step*i, u1 = u0 + step;
+      let sum = 0, cnt = 0;
+      for(let j=Math.ceil(u0); j<u1; j++){
+        sum += d.samples[Math.max(0, Math.min(d.samples.length-1, j))]; cnt++;
+      }
+      vals[i] = cnt ? sum/cnt : sampleAt(d.samples, u0);
+    }
+  }else{
+    for(let i=0;i<N;i++) vals[i] = sampleAt(d.samples, d.start + step*i);
+  }
+  let mean = 0;
+  for(const v of vals) mean += v;
+  mean /= N;
+  let peak = 1e-9;
+  for(const v of vals) peak = Math.max(peak, Math.abs(v-mean));
+  d.peak = peak;
+  d.rawPeak = rawPeak();
+  analyseRig(d.rig, vals.map(v => ({a: (v-mean)/peak*MODEL_R})));
+  return true;
+}
+
+/* ---------- playback ----------
+   Both buttons play the selected window itself, for as long as that window
+   lasts. A window of one cycle is a few milliseconds, so short windows repeat
+   until they are long enough to hear; long ones play once, complete. Both use
+   the same gain, so the difference you hear is the missing harmonics and
+   nothing else. */
+let actx = null;
+const audioCtx = () => (actx = actx || new (window.AudioContext || window.webkitAudioContext)());
+
+let sndSource = null;
+function stopSound(){
+  if(sndSource){ try{ sndSource.stop(); }catch(_){} sndSource = null; }
+}
+
+function windowPlan(){
+  const d = state.snd;
+  const len = Math.max(2, Math.round(d.len));
+  const dur = len/d.rate;
+  return {len, dur, reps: Math.max(1, Math.ceil(0.5/dur))};
+}
+
+/** Peak of the raw window, so both playbacks share one gain. */
+function rawPeak(){
+  const d = state.snd;
+  let p = 1e-9;
+  const a = Math.max(0, Math.round(d.start));
+  const b = Math.min(d.samples.length, a + Math.round(d.len));
+  for(let i=a;i<b;i++) p = Math.max(p, Math.abs(d.samples[i]));
+  return p;
+}
+
+/* The buffer is always built at the AudioContext's own sample rate and filled
+   by TIME rather than by source-sample index. A recording's rate and the
+   device's rate are often different (a 44.1 kHz clip on a 48 kHz output), and
+   handing the context a foreign rate is the one thing that used to break this. */
+function playSeconds(fillAtTime, seconds){
+  let ac;
+  try{ ac = audioCtx(); }
+  catch(err){ sndFail("no audio output available here"); return null; }
+  if(ac.state === "suspended" && ac.resume) ac.resume();
+  stopSound();
+
+  const rate = ac.sampleRate;
+  const frames = Math.max(1, Math.round(seconds*rate));
+  let buf;
+  try{ buf = ac.createBuffer(1, frames, rate); }
+  catch(err){ sndFail("audio buffer refused: " + err.message); return null; }
+
+  const ch = buf.getChannelData(0);
+  let pk = 0;
+  for(let i=0;i<frames;i++){
+    const v = fillAtTime(i/rate);
+    const c = v > 1 ? 1 : v < -1 ? -1 : (v || 0);
+    ch[i] = c;
+    const a = c < 0 ? -c : c;
+    if(a > pk) pk = a;
+  }
+  const fade = Math.min(frames >> 3, Math.round(rate*0.004));
+  for(let i=0;i<fade;i++){ ch[i] *= i/fade; ch[frames-1-i] *= i/fade; }
+
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  src.connect(ac.destination);
+  src.onended = () => { if(sndSource === src) sndSource = null; };
+  src.start();
+  sndSource = src;
+  return {frames, rate, pk, seconds: buf.duration};
+}
+
+function sndFail(msg){
+  const el = document.getElementById("playHint");
+  if(el) el.textContent = msg;
+}
+function sndReport(what, r){
+  if(!r) return;
+  sndFail(what + " \u00b7 " + r.seconds.toFixed(2) + " s \u00b7 " +
+    Math.round(r.rate/1000*10)/10 + " kHz \u00b7 peak " + r.pk.toFixed(2) +
+    (r.pk < 0.01 ? " (silent \u2014 nothing to hear)" : ""));
+}
+
+function playRaw(){
+  const d = state.snd;
+  if(!d.samples) return;
+  const plan = windowPlan(), g = 0.9/rawPeak(), base = Math.round(d.start);
+  sndReport("Played the window", playSeconds(t => {
+    const s = t*d.rate;
+    return sampleAt(d.samples, base + (s % plan.len))*g;
+  }, plan.len*plan.reps/d.rate));
+}
+
+/** One period of the reconstruction, by rotation recurrence rather than a
+    sin() per sample per harmonic. */
+function synthPeriod(sig, terms, len){
+  const out = new Float64Array(len);
+  out.fill(sig.dc);
+  for(const tm of terms){
+    const dth = 2*Math.PI*tm.k/len, cd = Math.cos(dth), sd = Math.sin(dth);
+    let sn = Math.sin(tm.phase), cs = Math.cos(tm.phase);
+    for(let i=0;i<len;i++){
+      out[i] += tm.amp*sn;
+      const nx = sn*cd + cs*sd;
+      cs = cs*cd - sn*sd;
+      sn = nx;
+    }
+  }
+  return out;
+}
+
+function playSynth(){
+  const d = state.snd, rig = d.rig;
+  if(!d.samples) return;
+  if(!rig.ready && !analyseSnd()){ sndFail("nothing rebuilt yet"); return; }
+
+  const plan = windowPlan();
+  const pLen = Math.min(plan.len, 65536);
+  const period = synthPeriod(rig.series.a, rig.terms.a, pLen);
+
+  let pk = 1e-12;
+  for(const v of period) pk = Math.max(pk, Math.abs(v));
+  // normalised to its own peak, so a long window's rebuild is audible rather
+  // than a silent ghost; the level it really carries is reported separately
+  const gain = 0.9/pk;
+  const winSec = plan.len/d.rate;
+
+  sndReport("Played the rebuild (" + rig.terms.a.length + " harmonics)", playSeconds(t => {
+    const u = (t % winSec)/winSec;
+    const x = u*pLen, j = Math.floor(x), f = x-j;
+    const a = period[j % pLen], b = period[(j+1) % pLen];
+    return (a + (b-a)*f)*gain;
+  }, winSec*plan.reps));
+}
+
+function preset4(name){
+  const rate = 44100, n = Math.round(rate*0.8), f = 220, out = new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const u = (i*f/rate) % 1;
+    let v = 0;
+    if(name === "square") v = u < 0.5 ? 1 : -1;
+    else if(name === "saw") v = 2*u-1;
+    else if(name === "vowel"){
+      const A = [1, 0.5, 0.85, 0.6, 0.2, 0.32, 0.14, 0.08];
+      for(let k=0;k<A.length;k++) v += A[k]*Math.sin(2*Math.PI*(k+1)*u);
+      v /= 2.6;
+    }else{
+      const K = [1,2,3,4,5,6], A = [1,0.6,0.4,0.25,0.16,0.1];
+      for(let k=0;k<K.length;k++) v += A[k]*Math.sin(2*Math.PI*K[k]*u + k);
+      v /= 2.2;
+    }
+    out[i] = v*0.8;
+  }
+  return {samples: out, rate, name};
+}
+
+/* ============================================================
+   Image: background, largest blob, walk the edge
+   ============================================================ */
+
+function buildMask(data, w, h, thresh, invert, paint){
+  let br = 0, bg = 0, bb = 0, n = 0;
+  const edge = (x,y) => { const i = (y*w+x)*4; br += data[i]; bg += data[i+1]; bb += data[i+2]; n++; };
+  for(let x=0;x<w;x++){ edge(x,0); edge(x,h-1); }
+  for(let y=1;y<h-1;y++){ edge(0,y); edge(w-1,y); }
+  br /= n; bg /= n; bb /= n;
+
+  const cut = thresh/100*441.7;           // max RGB distance is sqrt(3)*255
+  const mask = new Uint8Array(w*h);
+  for(let i=0;i<w*h;i++){
+    const p = i*4;
+    const d = Math.hypot(data[p]-br, data[p+1]-bg, data[p+2]-bb);
+    mask[i] = (d > cut) !== invert ? 1 : 0;
+    if(paint){
+      if(paint[i] > 0) mask[i] = 1;
+      else if(paint[i] < 0) mask[i] = 0;
+    }
+  }
+  return mask;
+}
+
+function largestBlob(mask, w, h){
+  const lab = new Int32Array(w*h).fill(-1), stack = [];
+  let best = -1, bestSize = 0, cur = 0;
+  for(let i=0;i<w*h;i++){
+    if(!mask[i] || lab[i] >= 0) continue;
+    let size = 0;
+    stack.length = 0; stack.push(i); lab[i] = cur;
+    while(stack.length){
+      const q = stack.pop(); size++;
+      const x = q % w, y = (q-x)/w;
+      const put = (nx,ny) => {
+        if(nx<0 || ny<0 || nx>=w || ny>=h) return;
+        const r = ny*w+nx;
+        if(mask[r] && lab[r] < 0){ lab[r] = cur; stack.push(r); }
+      };
+      put(x-1,y); put(x+1,y); put(x,y-1); put(x,y+1);
+    }
+    if(size > bestSize){ bestSize = size; best = cur; }
+    cur++;
+  }
+  if(best < 0) return null;
+  const out = new Uint8Array(w*h);
+  for(let i=0;i<w*h;i++) if(lab[i] === best) out[i] = 1;
+  return {mask: out, size: bestSize};
+}
+
+/** Moore boundary walk, clockwise, starting from the topmost-leftmost pixel. */
+function traceOutline(mask, w, h){
+  const at = (x,y) => (x>=0 && y>=0 && x<w && y<h) ? mask[y*w+x] : 0;
+  let sx = -1, sy = -1;
+  for(let y=0;y<h && sx<0;y++) for(let x=0;x<w;x++) if(mask[y*w+x]){ sx = x; sy = y; break; }
+  if(sx < 0) return null;
+
+  const N8 = [[-1,0],[-1,-1],[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1]];
+  const out = [{x:sx, y:sy}];
+  let px = sx, py = sy, bx = sx-1, by = sy;
+  const cap = 8*w*h;
+  for(let step=0; step<cap; step++){
+    let idx = 0;
+    for(let i=0;i<8;i++) if(N8[i][0] === bx-px && N8[i][1] === by-py){ idx = i; break; }
+    let moved = false;
+    for(let i=1;i<=8;i++){
+      const d = N8[(idx+i) % 8], nx = px+d[0], ny = py+d[1];
+      if(at(nx,ny)){
+        const prev = N8[(idx+i-1) % 8];
+        bx = px+prev[0]; by = py+prev[1];
+        px = nx; py = ny; moved = true;
+        break;
+      }
+    }
+    if(!moved) break;
+    if(px === sx && py === sy) break;
+    out.push({x:px, y:py});
+  }
+  return out.length > 12 ? out : null;
+}
+
+/* model.x = px*s + ox,  model.y = -py*s + oy */
+function frameXform(iw, ih){
+  const k = 2*MODEL_R/Math.max(iw, ih);
+  return {s:k, ox: -iw/2*k, oy: ih/2*k};
+}
+const imgToModel = (p, f) => ({x: p.x*f.s + f.ox, y: -p.y*f.s + f.oy});
+const modelToImg = (p, f) => ({x: (p.x - f.ox)/f.s, y: (f.oy - p.y)/f.s});
+
+function analyseImg(){
+  const d = state.img;
+  if(!d.data){ d.rig.ready = false; d.contour = null; updateReadouts(); return false; }
+  if(!d.photo) d.photo = frameXform(d.iw, d.ih);
+
+  if(d.fix === "draw"){
+    const raw = [];
+    for(const st of d.strokes) for(const p of st) raw.push(p);
+    d.contour = null;
+    const path = raw.length > 2 ? resampleClosed(raw, N, ["x","y"]) : null;
+    if(!path){ d.rig.ready = false; updateReadouts(); return false; }
+    analyseRig(d.rig, smoothClosed(path, 2, ["x","y"]));
+    return true;
+  }
+
+  const mask = buildMask(d.data, d.iw, d.ih, d.thresh, d.invert, d.paint);
+  const blob = largestBlob(mask, d.iw, d.ih);
+  if(!blob){ d.rig.ready = false; d.contour = null; updateReadouts(); return false; }
+  const raw = traceOutline(blob.mask, d.iw, d.ih);
+  if(!raw){ d.rig.ready = false; d.contour = null; updateReadouts(); return false; }
+  d.contour = raw;
+
+  // picture frame first, then scale the subject up to fill the model box
+  const f1 = frameXform(d.iw, d.ih);
+  const cf = raw.map(q => imgToModel(q, f1));
+  const b = boundsOf(cf, ["x","y"]);
+  const widest = Math.max(b.max.x-b.min.x, b.max.y-b.min.y, 1e-6);
+  const k2 = 2*MODEL_R/widest;
+  const cx2 = (b.min.x+b.max.x)/2, cy2 = (b.min.y+b.max.y)/2;
+  d.photo = {s: f1.s*k2, ox: (f1.ox-cx2)*k2, oy: (f1.oy-cy2)*k2};
+
+  const path = resampleClosed(raw.map(q => imgToModel(q, d.photo)), N, ["x","y"]);
+  if(!path){ d.rig.ready = false; return false; }
+  analyseRig(d.rig, smoothClosed(path, 3, ["x","y"]));
+  d.blobSize = blob.size;
+  return true;
+}
+
+/* ============================================================
+   Sound + image renderers
+   ============================================================ */
+
+const sndStage = document.getElementById("sndStage");
+const sndWaveC = document.getElementById("sndWave");
+const imgStage = document.getElementById("imgStage");
+
+function emptyNote(ctx, w, h, a, b){
+  ctx.fillStyle = COL.inkFaint; ctx.textAlign = "center";
+  ctx.font = "500 13px " + bodyFont(); ctx.fillText(a, w/2, h/2 - 6);
+  ctx.font = "400 11px " + bodyFont(); ctx.fillText(b, w/2, h/2 + 14);
+}
+
+function drawSndStage(){
+  const s = surface(sndStage), ctx = s.ctx;
+  paper(ctx, s.w, s.h);
+  const rig = state.snd.rig;
+  if(!rig.ready){ emptyNote(ctx, s.w, s.h, "Record a sound or upload a file", "or start from one of the test tones"); return; }
+
+  const v = mapping(vps.snd, s.w, s.h), t = state.t, terms = rig.terms.a;
+  const span = WAVE_X1 - WAVE_X0;
+  const at = u => ({x: WAVE_X0 + span*u, y: evaluate(rig.series.a, terms, u)});
+
+  ctx.lineWidth = 1; ctx.strokeStyle = "rgba(23,29,25,0.22)";
+  const z0 = toScreen2({x:WAVE_X0, y:0}, v), z1 = toScreen2({x:WAVE_X1, y:0}, v);
+  ctx.beginPath(); ctx.moveTo(z0.x, z0.y); ctx.lineTo(z1.x, z1.y); ctx.stroke();
+
+  ctx.lineJoin = ctx.lineCap = "round";
+  ctx.lineWidth = 1.4; ctx.strokeStyle = "rgba(23,29,25,0.20)";
+  poly(ctx, rig.path.map((p,i) => toScreen2({x: WAVE_X0 + span*i/N, y: p.a}, v)), false);
+
+  if(state.showGhost){
+    ctx.save(); ctx.setLineDash([2,4]); ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(23,29,25,0.30)";
+    poly(ctx, rig.trace.map((p,i) => toScreen2({x: WAVE_X0 + span*i/TRACE_RES, y: p.a}, v)), false);
+    ctx.restore();
+  }
+
+  ctx.lineWidth = 1;
+  const tip = chain2(ctx, v, SND_ANCHOR, rig.series.a.dc, terms, t, 0, AXCOL.a);
+  const pen = at(t), sPen = toScreen2(pen, v), sTip = toScreen2(tip, v);
+
+  ctx.save(); ctx.setLineDash([4,4]); ctx.lineWidth = 1;
+  ctx.strokeStyle = AXCOL.a + "66";
+  ctx.beginPath(); ctx.moveTo(sTip.x, sTip.y); ctx.lineTo(sPen.x, sPen.y); ctx.stroke();
+  ctx.restore();
+
+  const upto = Math.max(1, Math.round(t*TRACE_RES));
+  ctx.strokeStyle = COL.ink; ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  for(let i=0;i<=upto;i++){
+    const q = toScreen2({x: WAVE_X0 + span*i/TRACE_RES, y: rig.trace[i].a}, v);
+    i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = COL.ink;
+  ctx.beginPath(); ctx.arc(sPen.x, sPen.y, 3.6, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = COL.paper; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(sPen.x, sPen.y, 5.6, 0, Math.PI*2); ctx.stroke();
+
+  ctx.fillStyle = COL.inkFaint; ctx.font = "500 9.5px " + bodyFont(); ctx.textAlign = "center";
+  ctx.fillText("one cycle", (z0.x+z1.x)/2, z1.y + 14);
+}
+
+function drawSndWave(){
+  const s = surface(sndWaveC), ctx = s.ctx;
+  paper(ctx, s.w, s.h);
+  const d = state.snd;
+  const padL = 8, padR = 8, padT = 10, padB = 14;
+  const iw = s.w-padL-padR, ih = s.h-padT-padB, mid = padT+ih/2;
+
+  ctx.strokeStyle = "rgba(23,29,25,0.22)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(padL, mid+0.5); ctx.lineTo(padL+iw, mid+0.5); ctx.stroke();
+  if(!d.samples){
+    ctx.fillStyle = COL.inkFaint; ctx.textAlign = "center"; ctx.font = "400 11px " + bodyFont();
+    ctx.fillText("waveform appears here", s.w/2, mid - 8);
+    return;
+  }
+
+  const n = d.samples.length, cols = Math.floor(iw);
+  ctx.strokeStyle = "rgba(23,29,25,0.55)"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for(let c=0;c<cols;c++){
+    const i0 = Math.floor(n*c/cols), i1 = Math.max(i0+1, Math.floor(n*(c+1)/cols));
+    let lo = 1, hi = -1;
+    for(let i=i0;i<i1;i++){ const q = d.samples[i]; if(q<lo) lo=q; if(q>hi) hi=q; }
+    const x = padL+c+0.5;
+    ctx.moveTo(x, mid - hi*ih/2); ctx.lineTo(x, mid - lo*ih/2);
+  }
+  ctx.stroke();
+
+  const wx0 = padL + iw*d.start/n, wx1 = padL + iw*(d.start+d.len)/n;
+  ctx.fillStyle = AXCOL.a + "26";
+  ctx.fillRect(wx0, padT, Math.max(1.5, wx1-wx0), ih);
+  ctx.strokeStyle = AXCOL.a; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(wx0+0.5, padT); ctx.lineTo(wx0+0.5, padT+ih);
+  ctx.moveTo(wx1+0.5, padT); ctx.lineTo(wx1+0.5, padT+ih);
+  ctx.stroke();
+
+  ctx.fillStyle = COL.inkFaint; ctx.font = "400 9.5px " + bodyFont();
+  ctx.textAlign = "left"; ctx.fillText("0 s", padL, s.h-3);
+  ctx.textAlign = "right"; ctx.fillText((n/d.rate).toFixed(2) + " s", padL+iw, s.h-3);
+}
+
+function drawImgStage(){
+  const s = surface(imgStage), ctx = s.ctx;
+  paper(ctx, s.w, s.h);
+  const d = state.img, rig = d.rig;
+  if(!d.src){ emptyNote(ctx, s.w, s.h, "Upload a picture", "the subject's outline gets traced and rebuilt"); return; }
+
+  const v = mapping(vps.img, s.w, s.h), f = d.photo || frameXform(d.iw, d.ih);
+  const tl = toScreen2(imgToModel({x:0, y:0}, f), v);
+  const br = toScreen2(imgToModel({x:d.iw, y:d.ih}, f), v);
+  if(d.showPhoto){
+    ctx.save(); ctx.globalAlpha = 0.30;
+    ctx.drawImage(d.src, tl.x, tl.y, br.x-tl.x, br.y-tl.y);
+    ctx.restore();
+  }
+  if(d.paintCv){
+    ctx.save(); ctx.globalAlpha = 0.42;
+    ctx.drawImage(d.paintCv, tl.x, tl.y, br.x-tl.x, br.y-tl.y);
+    ctx.restore();
+  }
+
+  if(d.fix === "draw"){
+    ctx.strokeStyle = COL.ink; ctx.lineWidth = 2.2;
+    ctx.lineJoin = ctx.lineCap = "round";
+    for(const st of d.strokes) poly(ctx, st.map(q => toScreen2(q, v)), false);
+    if(d.active) poly(ctx, d.active.map(q => toScreen2(q, v)), false);
+    if(!d.strokes.length && !d.active){
+      emptyNote(ctx, s.w, s.h, "Trace the edge yourself", "your strokes replace the automatic outline");
+      return;
+    }
+  }
+
+  if(rig.ready) drawPlanarRig(ctx, s, v, rig);
+  else if(d.fix !== "draw")
+    emptyNote(ctx, s.w, s.h, "No subject found", "try edge sensitivity, or paint the subject in");
+
+  if(d.cursor && (d.fix === "add" || d.fix === "cut")){
+    const c = toScreen2(d.cursor, v);
+    ctx.strokeStyle = d.fix === "add" ? AXCOL.z : AXCOL.x;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(c.x, c.y, d.brush*f.s*v.s, 0, Math.PI*2); ctx.stroke();
+  }
+}
+
+/* ============================================================
+   Channel strips + spectrum
+   ============================================================ */
+
+const channelsEl = document.getElementById("channels");
+const specC = document.getElementById("spectrum");
+let waveCanvases = [];
+
+function buildChannels(){
+  const keys = current().keys, desc = AXDESC[keys.length];
+  channelsEl.className = "channels n" + keys.length;
+  channelsEl.innerHTML = keys.map((k,i) => (
+    '<section class="channel">' +
+      '<div class="chan-head">' +
+        '<span class="chan-id" style="color:' + AXCOL[k] + '">CH' + (i+1) + ' &middot; ' + k + '(t)</span>' +
+        '<span class="chan-desc">' + desc[k] + '</span>' +
+      '</div>' +
+      '<canvas class="wave" data-axis="' + k + '"></canvas>' +
+    '</section>'
+  )).join("");
+  waveCanvases = Array.prototype.slice.call(channelsEl.querySelectorAll("canvas.wave"))
+    .map(cv => ({cv, key: cv.dataset.axis}));
+}
+
+function drawWave(cv, key){
+  const s = surface(cv), ctx = s.ctx, w = s.w, h = s.h;
+  ctx.clearRect(0,0,w,h);
+  const padL = 8, padR = 8, padT = 12, padB = 16;
+  const iw = w-padL-padR, ih = h-padT-padB, mid = padT+ih/2;
+  const rig = current(), colour = AXCOL[key];
+
+  ctx.strokeStyle = "rgba(23,29,25,0.10)"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for(let i=0;i<=8;i++){ const x = padL+iw*i/8; ctx.moveTo(x+0.5,padT); ctx.lineTo(x+0.5,padT+ih); }
+  ctx.stroke();
+
+  if(!rig.ready){
+    ctx.strokeStyle = "rgba(23,29,25,0.22)";
+    ctx.beginPath(); ctx.moveTo(padL, mid+0.5); ctx.lineTo(padL+iw, mid+0.5); ctx.stroke();
+    return;
+  }
+
+  const sig = rig.series[key], terms = rig.terms[key], target = rig.samples[key];
+  let halfR = 1e-6;
+  for(const v of target) halfR = Math.max(halfR, Math.abs(v-sig.dc));
+  for(let i=0;i<Math.min(terms.length,8);i++) halfR = Math.max(halfR, terms[i].amp);
+  const toY = v => mid - (v-sig.dc)*((ih/2)/(halfR*1.06));
+
+  ctx.strokeStyle = "rgba(23,29,25,0.24)"; ctx.setLineDash([2,3]);
+  ctx.beginPath(); ctx.moveTo(padL, mid+0.5); ctx.lineTo(padL+iw, mid+0.5); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const show = terms.slice().sort((a,b)=>b.amp-a.amp).slice(0,6);
+  ctx.lineWidth = 1;
+  for(let j=0;j<show.length;j++){
+    const tm = show[j];
+    ctx.strokeStyle = colour + (j===0 ? "5C" : j===1 ? "42" : "28");
+    ctx.beginPath();
+    for(let i=0;i<=240;i++){
+      const t = i/240;
+      const py = toY(sig.dc + tm.amp*Math.sin(2*Math.PI*tm.k*t + tm.phase));
+      i ? ctx.lineTo(padL+iw*t,py) : ctx.moveTo(padL+iw*t,py);
+    }
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = "rgba(23,29,25,0.34)"; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const py = toY(target[i % N]);
+    i ? ctx.lineTo(padL+iw*(i/N),py) : ctx.moveTo(padL+iw*(i/N),py);
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = colour; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for(let i=0;i<=360;i++){
+    const t = i/360, py = toY(evaluate(sig, terms, t));
+    i ? ctx.lineTo(padL+iw*t,py) : ctx.moveTo(padL+iw*t,py);
+  }
+  ctx.stroke();
+
+  const sc = scanState(rig);
+  if(sc){
+    ctx.lineWidth = 1;
+    if(key === "x"){
+      const yy = toY(sc.col.X);
+      ctx.save(); ctx.setLineDash([3,3]); ctx.strokeStyle = AXCOL.x + "99";
+      ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(padL+iw, yy); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = COL.ink;
+      dots(ctx, sc.col.hits.map(p => ({x: padL+iw*p.t, y: yy})), 3);
+    }else{
+      ctx.save(); ctx.setLineDash([3,3]); ctx.strokeStyle = "rgba(23,29,25,0.35)";
+      ctx.beginPath();
+      for(const p of sc.col.hits){ const px = padL+iw*p.t; ctx.moveTo(px, padT); ctx.lineTo(px, padT+ih); }
+      ctx.stroke(); ctx.restore();
+      ctx.fillStyle = COL.ink;
+      dots(ctx, sc.col.hits.map(p => ({x: padL+iw*p.t, y: toY(p[key])})), 3);
+    }
+  }else{
+    const hx = padL + iw*state.t;
+    ctx.strokeStyle = "rgba(23,29,25,0.45)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hx,padT); ctx.lineTo(hx,padT+ih); ctx.stroke();
+    ctx.fillStyle = COL.ink;
+    ctx.beginPath(); ctx.arc(hx, toY(evaluate(sig, terms, state.t)), 3, 0, Math.PI*2); ctx.fill();
+  }
+
+  ctx.fillStyle = COL.inkFaint; ctx.font = "400 9.5px " + bodyFont();
+  ctx.textAlign = "left";  ctx.fillText("t = 0", padL, h-4);
+  ctx.textAlign = "right"; ctx.fillText("t = 1", padL+iw, h-4);
+  ctx.textAlign = "center"; ctx.fillText("mean " + sig.dc.toFixed(1), padL+iw/2, h-4);
+}
+
+function drawSpectrum(){
+  const s = surface(specC), ctx = s.ctx, w = s.w, h = s.h;
+  ctx.clearRect(0,0,w,h);
+  const padL = 26, padR = 8, padT = 6, padB = 16;
+  const iw = w-padL-padR, ih = h-padT-padB;
+  const rig = current(), keys = rig.keys;
+  const laneH = ih/keys.length;
+
+  if(!rig.ready){
+    ctx.strokeStyle = "rgba(23,29,25,0.22)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, padT+ih-0.5); ctx.lineTo(padL+iw, padT+ih-0.5); ctx.stroke();
+    ctx.fillStyle = COL.inkFaint; ctx.font = "400 11px " + bodyFont(); ctx.textAlign = "center";
+    ctx.fillText("No signal yet", w/2, padT+ih/2);
+    return;
+  }
+
+  let peak = 1e-6;
+  for(const k of keys) for(const t of rig.series[k].terms) peak = Math.max(peak, t.amp);
+  const bw = iw/HALF, barW = Math.max(1, bw-0.6);
+
+  keys.forEach((k, li) => {
+    const base = padT + laneH*(li+1) - 3;
+    const on = new Set(rig.terms[k].map(t=>t.k));
+    const terms = rig.series[k].terms;
+    for(let i=0;i<HALF;i++){
+      const bh = Math.sqrt(terms[i].amp/peak)*(laneH-8);
+      ctx.fillStyle = AXCOL[k] + (on.has(i+1) ? "" : "26");
+      ctx.fillRect(padL + i*bw, base-bh, barW, bh);
+    }
+    ctx.strokeStyle = "rgba(23,29,25,0.20)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, base+0.5); ctx.lineTo(padL+iw, base+0.5); ctx.stroke();
+    ctx.fillStyle = AXCOL[k]; ctx.font = "600 10px " + bodyFont(); ctx.textAlign = "right";
+    ctx.fillText(k, padL-7, base-1);
+  });
+
+  if(!state.sortByAmp){
+    const cx = padL + state.harmonics*bw;
+    ctx.save(); ctx.setLineDash([3,3]);
+    ctx.strokeStyle = "rgba(23,29,25,0.55)";
+    ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, padT+ih); ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = COL.inkFaint; ctx.font = "400 9.5px " + bodyFont(); ctx.textAlign = "center";
+  for(const k of [1,32,64,96,128,160,192,224,256]) ctx.fillText("k=" + k, padL + (k-0.5)*bw, h-4);
+}
+
+/* ============================================================
+   Readouts
+   ============================================================ */
+
+const formulasEl = document.getElementById("formulas");
+const stTerms = document.getElementById("stTerms");
+const stErr = document.getElementById("stErr");
+
+function formulaHTML(key, sig, terms){
+  const top = terms.slice().sort((a,b)=>b.amp-a.amp).slice(0,3);
+  let s = '<span class="lhs">' + key + '(t)</span> = ' + sig.dc.toFixed(1);
+  for(const tm of top){
+    s += " + " + tm.amp.toFixed(1) + "&middot;sin(2&pi;&middot;" + tm.k + "&middot;t " +
+         (tm.phase >= 0 ? "+" : "&minus;") + " " + Math.abs(tm.phase).toFixed(2) + ")";
+  }
+  const hidden = terms.length - top.length;
+  if(hidden > 0) s += ' <button class="linkish" data-full>+' + hidden + ' more</button>';
+  return s;
+}
+
+function updateReadouts(){
+  const rig = current();
+  if(!rig.ready){
+    formulasEl.innerHTML = '<div class="formula"><span class="dim">Draw something to see the series.</span></div>';
+    stTerms.textContent = "\u2014";
+    stErr.textContent = "\u2014";
+    return;
+  }
+  formulasEl.innerHTML = rig.keys.map(k =>
+    '<div class="formula ax-' + k + '">' + formulaHTML(k, rig.series[k], rig.terms[k]) + '</div>'
+  ).join("");
+  stTerms.innerHTML = rig.terms[rig.keys[0]].length + ' <small>&times; ' + rig.keys.length + ' axes</small>';
+  if(state.tab === "snd" && state.snd.samples && rig.trace){
+    let pk = 0;
+    for(const q of rig.trace) pk = Math.max(pk, Math.abs(q.a));
+    const frac = (pk/MODEL_R)*state.snd.peak/(state.snd.rawPeak || 1);
+    const pct = frac*100;
+    sndFail("Both play at matched volume. The rebuild carries " +
+      (pct < 1 ? pct.toFixed(2) : Math.round(pct)) + "% of the window's real level.");
+  }
+  stErr.innerHTML = rig.rms.toFixed(2) + ' <small>units &middot; ' + (100*rig.rms/rig.span).toFixed(1) + '%</small>';
+}
+
+/* ============================================================
+   Export dialog
+   ============================================================ */
+
+const dlg = document.getElementById("dlg");
+const dlgBody = document.getElementById("dlgBody");
+const dlgSub = document.getElementById("dlgSub");
+const dlgUnits = document.getElementById("dlgUnits");
+const dlgAll = document.getElementById("dlgAll");
+let dlgFmt = "table", dlgText = "";
+
+const unitsNote = rig => rig.keys.length === 1
+  ? "units: amplitude centred on zero and scaled so the loudest point of the window is 100; t is one cycle"
+  : rig.keys.length === 2
+  ? "units: the shape is scaled so its longest side spans 200, centred on the origin \u00b7 x right, y up"
+  : "units: the shape is scaled so its longest side spans 200, centred on the origin \u00b7 x right, y back, z up";
+
+function rowsFor(rig, key){
+  const src = dlgAll.checked ? rig.series[key].terms : rig.terms[key];
+  return src.slice().sort((a,b)=>a.k-b.k);
+}
+
+function tableHTML(rig){
+  const cols = rig.keys, maps = {}, ks = new Set();
+  for(const k of cols){
+    maps[k] = new Map();
+    for(const t of rowsFor(rig,k)){ maps[k].set(t.k, t); ks.add(t.k); }
+  }
+  let head = "<tr><th>k</th>";
+  for(const k of cols) head += '<th class="col-' + k + '">' + k + ' amplitude</th><th class="col-' + k + '">' + k + ' phase</th>';
+  head += "</tr>";
+
+  let body = '<tr><td>0 <span style="color:var(--ink-faint)">dc</span></td>';
+  for(const k of cols) body += "<td>" + rig.series[k].dc.toFixed(6) + "</td><td>&mdash;</td>";
+  body += "</tr>";
+
+  for(const kk of Array.from(ks).sort((a,b)=>a-b)){
+    body += "<tr><td>" + kk + "</td>";
+    for(const k of cols){
+      const t = maps[k].get(kk);
+      body += t ? "<td>" + t.amp.toFixed(6) + "</td><td>" + t.phase.toFixed(6) + "</td>"
+                : '<td style="color:var(--ink-faint)">&mdash;</td><td style="color:var(--ink-faint)">&mdash;</td>';
+    }
+    body += "</tr>";
+  }
+  return '<table class="terms"><thead>' + head + "</thead><tbody>" + body + "</tbody></table>";
+}
+
+function tableText(rig){
+  const cols = rig.keys, maps = {}, ks = new Set();
+  for(const k of cols){ maps[k] = new Map(); for(const t of rowsFor(rig,k)){ maps[k].set(t.k,t); ks.add(t.k); } }
+  const out = ["k\t" + cols.map(k => k+"_amplitude\t"+k+"_phase").join("\t")];
+  out.push("0\t" + cols.map(k => rig.series[k].dc.toFixed(6) + "\t0").join("\t"));
+  for(const kk of Array.from(ks).sort((a,b)=>a-b)){
+    out.push(kk + "\t" + cols.map(k => {
+      const t = maps[k].get(kk);
+      return t ? t.amp.toFixed(6) + "\t" + t.phase.toFixed(6) : "\t";
+    }).join("\t"));
+  }
+  return out.join("\n");
+}
+
+
+/** The series written out as a literal sum of sines, one term per line.
+    Harmonics whose amplitude rounds to zero contribute nothing, so they are
+    left out rather than padding the formula with no-op lines. */
+function sineExpr(sig, rows, sinFn, piTok, indent){
+  const pad = " ".repeat(indent);
+  const live = rows.filter(r => r.amp.toFixed(6) !== "0.000000");
+  let s = sig.dc.toFixed(6);
+  for(const r of live){
+    const ph = Math.abs(r.phase).toFixed(6);
+    const sign = (r.phase < 0 && ph !== "0.000000") ? "-" : "+";
+    s += "\n" + pad + "+ " + r.amp.toFixed(6).padStart(10) + " * " + sinFn +
+         "(2*" + piTok + "*" + r.k + "*t " + sign + " " + ph + ")";
+  }
+  // an axis with no live terms is constant; keep it a vector so plotting still works
+  if(!live.length) s += " + 0*t";
+  return {text: s, kept: live.length, dropped: rows.length - live.length};
+}
+
+function axisBlock(rig, k, open, sinFn, piTok, indent, comment){
+  const e = sineExpr(rig.series[k], rowsFor(rig,k), sinFn, piTok, indent);
+  let s = k + open + e.text + ")";
+  if(!e.kept) s += "   " + comment + " constant along this axis";
+  else if(e.dropped) s += "   " + comment + " " + e.dropped + " harmonic" +
+                          (e.dropped === 1 ? "" : "s") + " with zero amplitude omitted";
+  return s + "\n\n";
+}
+
+const HEADER = rig => (
+  "Fourier series exported from Fourier Plotter\n" +
+  "Each axis is one stack of sine waves:\n" +
+  "    value(t) = mean + sum of  amplitude * sin(2*pi*k*t + phase),   t in [0, 1)\n" +
+  unitsNote(rig)
+);
+
+function pyCode(rig){
+  const is3 = rig.keys.length === 3;
+  let s = HEADER(rig).split("\n").map(l => "# " + l).join("\n") + "\n\n";
+  s += "import numpy as np\n";
+  if(!is3) s += "import matplotlib.pyplot as plt\n";
+  s += "\nt = np.linspace(0, 1, 2000)\n\n";
+  for(const k of rig.keys) s += axisBlock(rig, k, " = (", "np.sin", "np.pi", 5, "#");
+  if(is3){
+    s += 'try:\n';
+    s += '    import plotly.graph_objects as go            # pip install plotly\n';
+    s += '    # renders in the browser / notebook via WebGL, no system libraries needed\n';
+    s += '    fig = go.Figure(go.Scatter3d(x=x, y=y, z=z, mode="lines",\n';
+    s += '                                 line=dict(width=4)))\n';
+    s += '    fig.update_layout(scene=dict(aspectmode="data"),\n';
+    s += '                      margin=dict(l=0, r=0, t=0, b=0))\n';
+    s += '    fig.show()                                   # drag to rotate\n';
+    s += '    # fig.write_html("shape.html")               # standalone rotatable page\n';
+    s += 'except Exception:                                # missing, or no browser to show it\n';
+    s += '    import matplotlib.pyplot as plt              # also rotatable, run as a script\n';
+    s += '    ax = plt.figure(figsize=(7, 7)).add_subplot(projection="3d")\n';
+    s += '    ax.plot(x, y, z, lw=1.5)\n';
+    s += '    ax.set_box_aspect((1, 1, 1))\n';
+    s += '    plt.show()\n';
+  }else if(rig.keys.length === 2){
+    s += 'fig, ax = plt.subplots(figsize=(6, 6))\n';
+    s += 'ax.plot(x, y, lw=1.5)\n';
+    s += 'ax.set_aspect("equal")\n';
+    s += 'ax.set_axis_off()\n';
+    s += 'plt.show()\n';
+  }else{
+    s += 'fig, ax = plt.subplots(figsize=(8, 3))\n';
+    s += 'ax.plot(t, a, lw=1.5)\n';
+    s += 'ax.set_xlabel("t  (one cycle)")\n';
+    s += 'plt.show()\n';
+  }
+  return s;
+}
+
+function rCode(rig){
+  const is3 = rig.keys.length === 3;
+  let s = HEADER(rig).split("\n").map(l => "# " + l).join("\n") + "\n\n";
+  s += "t <- seq(0, 1, length.out = 2000)\n\n";
+  for(const k of rig.keys) s += axisBlock(rig, k, " <- (", "sin", "pi", 6, "#");
+  if(is3){
+    s += '# Rotatable view. plotly draws in the browser / RStudio Viewer and needs no\n';
+    s += '# system libraries. (rgl is the other common choice, but on macOS it needs\n';
+    s += '# XQuartz + OpenGL and fails to load without them.)\n';
+    s += 'shown <- FALSE\n';
+    s += 'try({\n';
+    s += '  p <- plotly::plot_ly(x = x, y = y, z = z, type = "scatter3d", mode = "lines",\n';
+    s += '                       line = list(width = 4, color = "black"))\n';
+    s += '  p <- plotly::layout(p, scene = list(aspectmode = "data"))\n';
+    s += '  print(p)                                    # drag to rotate\n';
+    s += '  # htmlwidgets::saveWidget(p, "shape.html")  # standalone rotatable page\n';
+    s += '  shown <- TRUE\n';
+    s += '}, silent = TRUE)\n\n';
+    s += '# No plotly? Fall back to four fixed viewpoints, base R only.\n';
+    s += 'if (!shown) {\n';
+    s += '  message(\'For a rotatable view: install.packages("plotly")\')\n';
+    s += '  proj <- function(az, el) cbind(x * cos(az) - y * sin(az),\n';
+    s += '                                 (x * sin(az) + y * cos(az)) * sin(el) + z * cos(el))\n';
+    s += '  op <- par(mfrow = c(2, 2), mar = c(0, 0, 1.5, 0))\n';
+    s += '  for (az in c(0, pi/4, pi/2, 3*pi/4)) {\n';
+    s += '    plot(proj(az, 0.4), type = "l", lwd = 2, asp = 1, axes = FALSE,\n';
+    s += '         xlab = "", ylab = "", main = sprintf("azimuth %.0f deg", az * 180 / pi))\n';
+    s += '  }\n';
+    s += '  par(op)\n';
+    s += '}\n';
+  }else if(rig.keys.length === 2){
+    s += 'plot(x, y, type = "l", lwd = 2, asp = 1, axes = FALSE, xlab = "", ylab = "")\n';
+  }else{
+    s += 'plot(t, a, type = "l", lwd = 2, xlab = "t  (one cycle)", ylab = "amplitude")\n';
+  }
+  return s;
+}
+
+function jsonCode(rig){
+  const o = {
+    generator: "Fourier Plotter",
+    convention: "value(t) = dc + sum(amplitude * sin(2*pi*k*t + phase)), t in [0,1)",
+    units: unitsNote(rig),
+    samples: N,
+    axes: {}
+  };
+  for(const k of rig.keys){
+    o.axes[k] = {
+      dc: +rig.series[k].dc.toFixed(6),
+      terms: rowsFor(rig,k).map(r => ({k: r.k, amplitude: +r.amp.toFixed(6), phase: +r.phase.toFixed(6)}))
+    };
+  }
+  return JSON.stringify(o, null, 2);
+}
+
+function csvCode(rig){
+  const lines = ["axis,k,amplitude,phase"];
+  for(const k of rig.keys){
+    lines.push(k + ",0," + rig.series[k].dc.toFixed(6) + ",0");
+    for(const r of rowsFor(rig,k)) lines.push(k + "," + r.k + "," + r.amp.toFixed(6) + "," + r.phase.toFixed(6));
+  }
+  return lines.join("\n");
+}
+
+function renderDialog(){
+  const rig = current();
+  if(!rig.ready) return;
+  const nTerms = rowsFor(rig, rig.keys[0]).length;
+  dlgSub.textContent = rig.keys.length + " axes \u00b7 " + nTerms + " harmonics each \u00b7 " +
+    (dlgAll.checked ? "every harmonic the transform found" : "exactly the terms drawn on screen");
+  dlgUnits.textContent = unitsNote(rig);
+
+  if(dlgFmt === "table"){
+    dlgBody.innerHTML = tableHTML(rig);
+    dlgText = tableText(rig);
+  }else{
+    dlgText = dlgFmt === "python" ? pyCode(rig)
+            : dlgFmt === "r"      ? rCode(rig)
+            : dlgFmt === "json"   ? jsonCode(rig)
+            :                       csvCode(rig);
+    const pre = document.createElement("pre");
+    pre.textContent = dlgText;
+    dlgBody.innerHTML = "";
+    dlgBody.appendChild(pre);
+  }
+  dlgBody.scrollTop = 0;
+}
+
+function openDialog(){
+  if(!current().ready) return;
+  renderDialog();
+  dlg.showModal();
+}
+
+document.getElementById("btnFull").addEventListener("click", openDialog);
+formulasEl.addEventListener("click", e => { if(e.target.closest("[data-full]")) openDialog(); });
+document.getElementById("dlgClose").addEventListener("click", () => dlg.close());
+dlgAll.addEventListener("change", renderDialog);
+document.getElementById("dlgSeg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-fmt]");
+  if(!b) return;
+  dlgFmt = b.dataset.fmt;
+  Array.prototype.forEach.call(e.currentTarget.querySelectorAll("button"),
+    x => x.setAttribute("aria-pressed", String(x === b)));
+  renderDialog();
+});
+document.getElementById("dlgCopy").addEventListener("click", e => {
+  const btn = e.currentTarget;
+  const done = () => { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = "Copy"; }, 1400); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(dlgText).then(done, () => { fallbackCopy(); done(); });
+  }else{ fallbackCopy(); done(); }
+});
+function fallbackCopy(){
+  const ta = document.createElement("textarea");
+  ta.value = dlgText; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand("copy"); }catch(_){}
+  ta.remove();
+}
+
+/* ============================================================
+   Input
+   ============================================================ */
+
+function localPoint(e, cv){
+  const r = cv.getBoundingClientRect();
+  return {sx: e.clientX-r.left, sy: e.clientY-r.top};
+}
+
+bed.addEventListener("pointerdown", e => {
+  if(e.shiftKey) return;                     // shift-drag pans instead of drawing
+  bed.setPointerCapture(e.pointerId);
+  const s = surface(bed), v = view2(s.w, s.h), q = localPoint(e, bed);
+  state.d2.drawing = true;
+  state.d2.active = [toModel2(q.sx, q.sy, v)];
+  e.preventDefault();
+});
+bed.addEventListener("pointermove", e => {
+  const d = state.d2;
+  if(!d.active) return;
+  const s = surface(bed), v = view2(s.w, s.h), q = localPoint(e, bed);
+  const p = toModel2(q.sx, q.sy, v), prev = d.active[d.active.length-1];
+  if(Math.hypot(p.x-prev.x, p.y-prev.y)*v.s >= 1.6) d.active.push(p);
+});
+function endBed(){
+  const d = state.d2;
+  if(!d.active) return;
+  if(d.active.length > 2) d.strokes.push(d.active);
+  d.active = null; d.drawing = false;
+  if(analyse2()){ state.t = 0; syncPos(); }
+}
+bed.addEventListener("pointerup", e => { endBed(); try{ bed.releasePointerCapture(e.pointerId); }catch(_){} });
+bed.addEventListener("pointercancel", endBed);
+
+planC.addEventListener("pointerdown", e => {
+  planC.setPointerCapture(e.pointerId);
+  const s = surface(planC), v = viewPlan(s.w, s.h), q = localPoint(e, planC);
+  state.d3.active = [{x:(q.sx-v.cx)/v.s, y:(v.cy-q.sy)/v.s}];
+  e.preventDefault();
+});
+planC.addEventListener("pointermove", e => {
+  const d = state.d3;
+  if(!d.active) return;
+  const s = surface(planC), v = viewPlan(s.w, s.h), q = localPoint(e, planC);
+  const p = {x:(q.sx-v.cx)/v.s, y:(v.cy-q.sy)/v.s}, prev = d.active[d.active.length-1];
+  if(Math.hypot(p.x-prev.x, p.y-prev.y)*v.s >= 1.4) d.active.push(p);
+});
+function endPlan(){
+  const d = state.d3;
+  if(!d.active) return;
+  if(d.active.length > 2) d.strokes.push(d.active);
+  d.active = null;
+  if(analyse3()){ state.t = 0; syncPos(); }
+}
+planC.addEventListener("pointerup", e => { endPlan(); try{ planC.releasePointerCapture(e.pointerId); }catch(_){} });
+planC.addEventListener("pointercancel", endPlan);
+
+function heightPaint(e){
+  const s = surface(heightC), q = localPoint(e, heightC);
+  const padL = 10, padR = 10, padT = 12, padB = 16;
+  const iw = s.w-padL-padR, ih = s.h-padT-padB, mid = padT+ih/2;
+  const t = Math.min(1, Math.max(0, (q.sx-padL)/iw));
+  const z = Math.max(-ZR, Math.min(ZR, (mid-q.sy)*ZR/(ih/2)));
+  const idx = Math.round(t*(HN-1));
+  const d = state.d3;
+  if(d.lastH === null){
+    d.height[idx] = z;
+  }else{
+    const a = d.lastH[0] <= idx ? d.lastH : [idx, z];
+    const b = d.lastH[0] <= idx ? [idx, z] : d.lastH;
+    for(let i=a[0];i<=b[0];i++){
+      const f = b[0] === a[0] ? 0 : (i-a[0])/(b[0]-a[0]);
+      d.height[i] = a[1] + (b[1]-a[1])*f;
+    }
+  }
+  d.lastH = [idx, z];
+  d.heightDrawn = true;
+}
+heightC.addEventListener("pointerdown", e => {
+  heightC.setPointerCapture(e.pointerId);
+  state.d3.lastH = null;
+  heightPaint(e);
+  e.preventDefault();
+});
+heightC.addEventListener("pointermove", e => { if(state.d3.lastH !== null) heightPaint(e); });
+function endHeight(){
+  if(state.d3.lastH === null) return;
+  state.d3.lastH = null;
+  analyse3();
+}
+heightC.addEventListener("pointerup", e => { endHeight(); try{ heightC.releasePointerCapture(e.pointerId); }catch(_){} });
+heightC.addEventListener("pointercancel", endHeight);
+
+let orbit = null;
+view3C.addEventListener("pointerdown", e => {
+  view3C.setPointerCapture(e.pointerId);
+  view3C.classList.add("dragging");
+  orbit = {x:e.clientX, y:e.clientY};
+  e.preventDefault();
+});
+view3C.addEventListener("pointermove", e => {
+  if(!orbit) return;
+  state.cam.az += (e.clientX-orbit.x)*0.008;
+  state.cam.el = Math.max(-1.35, Math.min(1.35, state.cam.el + (e.clientY-orbit.y)*0.006));
+  orbit = {x:e.clientX, y:e.clientY};
+});
+function endOrbit(e){
+  orbit = null;
+  view3C.classList.remove("dragging");
+  if(e) try{ view3C.releasePointerCapture(e.pointerId); }catch(_){}
+}
+view3C.addEventListener("pointerup", endOrbit);
+view3C.addEventListener("pointercancel", endOrbit);
+view3C.addEventListener("wheel", e => {
+  e.preventDefault();
+  state.cam.zoom = Math.max(0.45, Math.min(3.2, state.cam.zoom*(e.deltaY > 0 ? 0.92 : 1.087)));
+  syncZoom();
+}, {passive:false});
+
+/* ============================================================
+   Presets
+   ============================================================ */
+
+function preset2(name){
+  const pts = [];
+  const push = (x,y) => pts.push({x: x*MODEL_R, y: y*MODEL_R});
+  if(name === "star"){
+    for(let i=0;i<10;i++){
+      const r = i % 2 ? 0.42 : 1, a = Math.PI/2 - i*Math.PI/5;
+      push(Math.cos(a)*r, Math.sin(a)*r);
+    }
+  }else if(name === "heart"){
+    for(let i=0;i<300;i++){
+      const t = i/300*Math.PI*2;
+      push(Math.pow(Math.sin(t),3),
+           (13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))/16);
+    }
+  }else if(name === "square"){
+    const c = [[-1,-1],[1,-1],[1,1],[-1,1],[-1,-1]];
+    for(let i=0;i<4;i++) for(let j=0;j<40;j++){
+      const f = j/40;
+      push(c[i][0]+(c[i+1][0]-c[i][0])*f, c[i][1]+(c[i+1][1]-c[i][1])*f);
+    }
+  }else{
+    for(let i=0;i<360;i++){
+      const a = i/360*Math.PI*2, r = 0.55 + 0.45*Math.cos(6*a);
+      push(Math.cos(a)*r, Math.sin(a)*r);
+    }
+  }
+  return pts;
+}
+
+function preset3(name){
+  const out = [], M = 480;
+  for(let i=0;i<M;i++){
+    const th = i/M*Math.PI*2;
+    let p;
+    if(name === "trefoil")        p = {x: Math.sin(th)+2*Math.sin(2*th), y: Math.cos(th)-2*Math.cos(2*th), z: -Math.sin(3*th)};
+    else if(name === "crown")     p = {x: Math.cos(th), y: Math.sin(th), z: 0.42*Math.cos(5*th)};
+    else if(name === "lissajous") p = {x: Math.sin(2*th), y: Math.sin(3*th + Math.PI/4), z: Math.sin(5*th)};
+    else                          p = {x: Math.cos(th), y: Math.sin(th), z: 0.55*Math.cos(2*th)};
+    out.push(p);
+  }
+  let m = 0;
+  for(const p of out) m = Math.max(m, Math.abs(p.x), Math.abs(p.y), Math.abs(p.z));
+  const s = MODEL_R/m;
+  return out.map(p => ({x:p.x*s, y:p.y*s, z:p.z*s}));
+}
+
+/** Split a 3D preset into a plan stroke plus a height profile indexed by plan arc length. */
+function loadPreset3(name){
+  const pts = preset3(name), d = state.d3;
+  const cum = [0];
+  for(let i=1;i<=pts.length;i++){
+    const a = pts[i-1], b = pts[i % pts.length];
+    cum.push(cum[i-1] + Math.hypot(b.x-a.x, b.y-a.y));
+  }
+  const total = cum[cum.length-1];
+  d.strokes = [pts.map(p => ({x:p.x, y:p.y}))];
+  d.active = null;
+  let j = 0;
+  for(let i=0;i<HN;i++){
+    const want = total*i/(HN-1);
+    while(j < cum.length-2 && cum[j+1] < want) j++;
+    const seg = cum[j+1]-cum[j], f = seg > 0 ? (want-cum[j])/seg : 0;
+    const a = pts[j].z, b = pts[(j+1) % pts.length].z;
+    d.height[i] = a + (b-a)*f;
+  }
+  d.heightDrawn = true;
+  if(analyse3()){ state.t = 0; syncPos(); }
+}
+
+document.getElementById("presets2").addEventListener("click", e => {
+  const b = e.target.closest("button[data-preset]");
+  if(!b) return;
+  state.d2.strokes = [preset2(b.dataset.preset)];
+  state.d2.active = null; state.d2.drawing = false;
+  if(analyse2()){ state.t = 0; syncPos(); }
+});
+document.getElementById("presets3").addEventListener("click", e => {
+  const b = e.target.closest("button[data-preset3]");
+  if(b) loadPreset3(b.dataset.preset3);
+});
+
+/* ============================================================
+   Console
+   ============================================================ */
+
+const harmSlider = document.getElementById("harm");
+const harmVal = document.getElementById("harmVal");
+const harmLabel = document.getElementById("harmLabel");
+const speedSlider = document.getElementById("speed");
+const speedVal = document.getElementById("speedVal");
+const posSlider = document.getElementById("pos");
+const posVal = document.getElementById("posVal");
+const btnPlay = document.getElementById("btnPlay");
+
+function syncPos(){
+  posSlider.value = Math.round(state.t*1000);
+  posVal.textContent = state.t.toFixed(3);
+}
+
+harmSlider.addEventListener("input", () => {
+  state.harmonics = +harmSlider.value;
+  harmVal.textContent = state.harmonics;
+  rebuild(current());
+  if(dlg.open) renderDialog();
+});
+speedSlider.addEventListener("input", () => {
+  state.speed = +speedSlider.value/100;
+  speedVal.textContent = state.speed.toFixed(1) + "\u00d7";
+});
+posSlider.addEventListener("pointerdown", () => { state.scrubbing = true; });
+window.addEventListener("pointerup", () => { state.scrubbing = false; });
+posSlider.addEventListener("input", () => {
+  state.t = +posSlider.value/1000;
+  posVal.textContent = state.t.toFixed(3);
+});
+
+document.getElementById("tgCircles").addEventListener("change", e => { state.showCircles = e.target.checked; });
+document.getElementById("tgGhost").addEventListener("change", e => { state.showGhost = e.target.checked; });
+document.getElementById("tgSeam").addEventListener("change", e => { state.seam = e.target.checked; analyse3(); });
+document.getElementById("tgSort").addEventListener("change", e => {
+  state.sortByAmp = e.target.checked;
+  harmLabel.textContent = state.sortByAmp ? "Loudest terms" : "Harmonics k \u2264";
+  rebuild(current());
+  if(dlg.open) renderDialog();
+});
+
+const modeSeg = document.getElementById("modeSeg");
+const modeHint = document.getElementById("modeHint");
+const colsSlider = document.getElementById("cols");
+const colsVal = document.getElementById("colsVal");
+
+const HINTS = {
+  trace: "The pen follows the curve in order, one point at a time.",
+  scan: "A line sweeps left to right and dots every y it meets \u2014 two where the shape doubles back, more where it folds again. The x stack still drives the line."
+};
+
+function setMode(m){
+  state.mode = m;
+  Array.prototype.forEach.call(modeSeg.querySelectorAll("button"),
+    b => b.setAttribute("aria-pressed", String(b.dataset.mode === m)));
+  modeHint.textContent = HINTS[m];
+  document.getElementById("scanField").hidden = m !== "scan";
+  buildScan(current());
+}
+modeSeg.addEventListener("click", e => {
+  const b = e.target.closest("button[data-mode]");
+  if(b) setMode(b.dataset.mode);
+});
+colsSlider.addEventListener("input", () => {
+  state.scanCols = +colsSlider.value;
+  colsVal.textContent = state.scanCols;
+  buildScan(current());
+});
+
+btnPlay.addEventListener("click", () => {
+  state.playing = !state.playing;
+  btnPlay.textContent = state.playing ? "Pause" : "Play";
+});
+
+document.getElementById("btnUndo").addEventListener("click", () => {
+  if(state.tab === "snd") return;
+  if(state.tab === "img"){
+    if(state.img.fix === "draw"){ state.img.strokes.pop(); analyseImg(); }
+    return;
+  }
+  const d = state.tab === "2d" ? state.d2 : state.d3;
+  d.strokes.pop();
+  if(!d.strokes.length){ d.rig.ready = false; d.rig.path = null; updateReadouts(); }
+  else if(state.tab === "2d") analyse2();
+  else analyse3();
+});
+
+document.getElementById("btnClear").addEventListener("click", () => {
+  if(state.tab === "snd"){
+    stopSound();
+    state.snd.samples = null; state.snd.rig.ready = false; state.snd.rig.path = null;
+    document.getElementById("sndInfo").textContent = "no audio loaded";
+  }else if(state.tab === "img"){
+    state.img.src = null; state.img.data = null; state.img.contour = null;
+    state.img.paint = null; state.img.paintCv = null;
+    state.img.strokes = []; state.img.active = null; state.img.photo = null;
+    state.img.rig.ready = false; state.img.rig.path = null;
+  }else if(state.tab === "2d"){
+    state.d2.strokes = []; state.d2.active = null; state.d2.drawing = false;
+    state.d2.rig.ready = false; state.d2.rig.path = null;
+  }else{
+    state.d3.strokes = []; state.d3.active = null;
+    state.d3.height = new Float64Array(HN);
+    state.d3.heightDrawn = false;
+    state.d3.rig.ready = false; state.d3.rig.path = null;
+  }
+  state.t = 0; syncPos(); updateReadouts();
+});
+
+specC.addEventListener("click", e => {
+  if(!current().ready) return;
+  const r = specC.getBoundingClientRect();
+  const padL = 26, iw = r.width-padL-8;
+  const k = Math.round((e.clientX-r.left-padL)/iw*HALF);
+  state.harmonics = Math.min(HALF, Math.max(1, k));
+  harmSlider.value = state.harmonics;
+  harmVal.textContent = state.harmonics;
+  rebuild(current());
+});
+
+window.addEventListener("keydown", e => {
+  if(e.target.tagName === "INPUT" || dlg.open) return;
+  if(e.code === "Space"){ e.preventDefault(); btnPlay.click(); }
+  if(e.key === "c" || e.key === "C") document.getElementById("btnClear").click();
+});
+
+/* ---------- zoom, pan, media controls ---------- */
+const zoomSlider = document.getElementById("zoom");
+const zoomVal = document.getElementById("zoomVal");
+const sndInfo = document.getElementById("sndInfo");
+const btnRec = document.getElementById("btnRec");
+
+function curZoom(){ return state.tab === "3d" ? state.cam.zoom : vps[state.tab].zoom; }
+function syncZoom(){
+  const z = curZoom();
+  zoomSlider.value = Math.round(z*100);
+  zoomVal.textContent = z.toFixed(1) + "\u00d7";
+}
+zoomSlider.addEventListener("input", () => {
+  const z = +zoomSlider.value/100;
+  if(state.tab === "3d") state.cam.zoom = z; else vps[state.tab].zoom = z;
+  zoomVal.textContent = z.toFixed(1) + "\u00d7";
+});
+document.getElementById("btnResetView").addEventListener("click", resetView);
+
+/** Wheel zooms about the cursor; drag pans (shift-drag where plain drag draws). */
+function attachPanZoom(cv, key, plainDrag){
+  const allowDrag = () => typeof plainDrag === "function" ? plainDrag() : plainDrag;
+  cv.addEventListener("wheel", e => {
+    e.preventDefault();
+    const vp = vps[key], sf = surface(cv), m = mapping(vp, sf.w, sf.h), q = localPoint(e, cv);
+    const before = toModel2(q.sx, q.sy, m);
+    const old = vp.zoom;
+    vp.zoom = Math.max(0.35, Math.min(8, old*(e.deltaY > 0 ? 0.9 : 1/0.9)));
+    const g = vp.zoom/old;
+    vp.cx = before.x - (before.x - vp.cx)/g;
+    vp.cy = before.y - (before.y - vp.cy)/g;
+    syncZoom();
+  }, {passive:false});
+
+  let pan = null;
+  cv.addEventListener("pointerdown", e => {
+    if(!allowDrag() && !e.shiftKey) return;
+    cv.setPointerCapture(e.pointerId);
+    cv.classList.add("dragging");
+    pan = {x:e.clientX, y:e.clientY};
+    e.preventDefault();
+  });
+  cv.addEventListener("pointermove", e => {
+    if(!pan) return;
+    const vp = vps[key], sf = surface(cv), m = mapping(vp, sf.w, sf.h);
+    vp.cx -= (e.clientX-pan.x)/m.s;
+    vp.cy += (e.clientY-pan.y)/m.s;
+    pan = {x:e.clientX, y:e.clientY};
+  });
+  const stop = e => {
+    pan = null; cv.classList.remove("dragging");
+    if(e) try{ cv.releasePointerCapture(e.pointerId); }catch(_){}
+  };
+  cv.addEventListener("pointerup", stop);
+  cv.addEventListener("pointercancel", stop);
+}
+attachPanZoom(bed, "2d", false);
+attachPanZoom(imgStage, "img", () => state.img.fix === "pan");
+attachPanZoom(sndStage, "snd", true);
+
+/* ---------- sound ---------- */
+const winLen = document.getElementById("winLen");
+const winLenVal = document.getElementById("winLenVal");
+const LEN_MIN = 16;                       // 16 samples up to the whole clip, log scale
+const lenMax = () => state.snd.samples ? Math.max(LEN_MIN*2, state.snd.samples.length) : 8192;
+const lenFromSlider = v => Math.max(LEN_MIN, Math.round(LEN_MIN*Math.pow(lenMax()/LEN_MIN, v/1000)));
+const sliderFromLen = L =>
+  Math.round(1000*Math.log(Math.max(LEN_MIN, L)/LEN_MIN)/Math.log(lenMax()/LEN_MIN));
+
+const winHint = document.getElementById("winHint");
+const secs = v => v < 1 ? (v*1000).toFixed(v < 0.01 ? 2 : 1) + " ms" : v.toFixed(2) + " s";
+
+function describeWindow(){
+  const d = state.snd;
+  if(!d.samples){ winLenVal.textContent = "\u2014"; winHint.innerHTML = "&nbsp;"; return; }
+  const dur = d.len/d.rate, f0 = d.rate/d.len, top = f0*HALF;
+  winLenVal.textContent = secs(dur);
+  winHint.textContent = Math.round(d.len) + " samples \u00b7 cycle = " +
+    (f0 >= 1 ? f0.toFixed(f0 < 10 ? 1 : 0) + " Hz" : f0.toFixed(2) + " Hz") +
+    " \u00b7 256 harmonics reach " + (top >= 1000 ? (top/1000).toFixed(1) + " kHz" : Math.round(top) + " Hz");
+}
+
+function describeSound(){
+  const d = state.snd;
+  if(!d.samples){ sndInfo.textContent = "no audio loaded"; describeWindow(); return; }
+  sndInfo.textContent = (d.name || "audio") + " \u00b7 " +
+    (d.samples.length/d.rate).toFixed(2) + " s \u00b7 " + Math.round(d.rate) + " Hz";
+  describeWindow();
+  winLen.value = sliderFromLen(d.len);
+}
+function afterSound(){
+  describeSound();
+  state.t = 0; syncPos();
+}
+winLen.addEventListener("input", () => {
+  const d = state.snd;
+  if(!d.samples) return;
+  d.len = Math.min(lenFromSlider(+winLen.value), d.samples.length);
+  d.start = Math.max(0, Math.min(d.start, d.samples.length - d.len));
+  describeWindow();
+  analyseSnd();
+});
+document.getElementById("btnOneCycle").addEventListener("click", () => {
+  const d = state.snd;
+  if(!d.samples) return;
+  const p = detectPeriod(d.samples, Math.min(d.start, d.samples.length-4), d.rate);
+  d.len = p || Math.min(1024, d.samples.length);
+  describeSound(); analyseSnd();
+});
+document.getElementById("btnWholeClip").addEventListener("click", () => {
+  const d = state.snd;
+  if(!d.samples) return;
+  d.start = 0; d.len = d.samples.length;
+  describeSound(); analyseSnd();
+});
+
+let sndDrag = false;
+function moveWindow(e){
+  const d = state.snd;
+  if(!d.samples) return;
+  const sf = surface(sndWaveC), r = sndWaveC.getBoundingClientRect();
+  const padL = 8, iw = sf.w-16;
+  const f = Math.min(1, Math.max(0, (e.clientX-r.left-padL)/iw));
+  d.start = Math.max(0, Math.min(d.samples.length - d.len, Math.round(f*d.samples.length - d.len/2)));
+  analyseSnd();
+}
+sndWaveC.addEventListener("pointerdown", e => {
+  sndWaveC.setPointerCapture(e.pointerId); sndDrag = true; moveWindow(e); e.preventDefault();
+});
+sndWaveC.addEventListener("pointermove", e => { if(sndDrag) moveWindow(e); });
+["pointerup","pointercancel"].forEach(ev => sndWaveC.addEventListener(ev, e => {
+  sndDrag = false; try{ sndWaveC.releasePointerCapture(e.pointerId); }catch(_){}
+}));
+
+function decodeInto(arrayBuf, name){
+  return audioCtx().decodeAudioData(arrayBuf).then(buf => {
+    let mono = buf.getChannelData(0);
+    if(buf.numberOfChannels > 1){
+      mono = new Float32Array(buf.length);
+      for(let c=0;c<buf.numberOfChannels;c++){
+        const ch = buf.getChannelData(c);
+        for(let i=0;i<mono.length;i++) mono[i] += ch[i]/buf.numberOfChannels;
+      }
+    }
+    loadSound(mono.slice(0, Math.min(mono.length, Math.round(buf.sampleRate*12))), buf.sampleRate, name);
+    afterSound();
+  });
+}
+
+document.getElementById("sndFile").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0];
+  if(!f) return;
+  sndInfo.textContent = "decoding\u2026";
+  f.arrayBuffer()
+   .then(b => decodeInto(b, f.name.replace(/\.[^.]+$/, "")))
+   .catch(() => { sndInfo.textContent = "could not decode that file"; });
+});
+
+let recorder = null, chunks = [];
+btnRec.addEventListener("click", () => {
+  const d = state.snd;
+  if(d.recording){ recorder.stop(); return; }
+  if(!navigator.mediaDevices || !window.MediaRecorder){ sndInfo.textContent = "recording not supported here"; return; }
+  navigator.mediaDevices.getUserMedia({audio:true}).then(stream => {
+    recorder = new MediaRecorder(stream);
+    chunks = [];
+    recorder.ondataavailable = ev => chunks.push(ev.data);
+    recorder.onstop = () => {
+      stream.getTracks().forEach(tr => tr.stop());
+      d.recording = false; btnRec.textContent = "Record"; btnRec.classList.remove("rec");
+      sndInfo.textContent = "decoding\u2026";
+      new Blob(chunks).arrayBuffer()
+        .then(b => decodeInto(b, "recording"))
+        .catch(() => { sndInfo.textContent = "could not decode the recording"; });
+    };
+    recorder.start();
+    d.recording = true; btnRec.textContent = "Stop"; btnRec.classList.add("rec");
+    sndInfo.textContent = "recording\u2026";
+  }).catch(() => { sndInfo.textContent = "microphone permission denied"; });
+});
+
+document.getElementById("btnPlayRaw").addEventListener("click", playRaw);
+document.getElementById("btnPlaySyn").addEventListener("click", playSynth);
+document.getElementById("presets4").addEventListener("click", e => {
+  const b = e.target.closest("button[data-preset4]");
+  if(!b) return;
+  const p = preset4(b.dataset.preset4);
+  loadSound(p.samples, p.rate, p.name);
+  afterSound();
+});
+
+/* ---------- image ---------- */
+const threshSlider = document.getElementById("thresh");
+document.getElementById("imgFile").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0];
+  if(!f) return;
+  const url = URL.createObjectURL(f);
+  const im = new Image();
+  im.onload = () => {
+    const k = Math.min(1, 320/Math.max(im.width, im.height));
+    const w = Math.max(8, Math.round(im.width*k)), h = Math.max(8, Math.round(im.height*k));
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const cx = c.getContext("2d");
+    cx.drawImage(im, 0, 0, w, h);
+    const d = state.img;
+    d.src = c; d.iw = w; d.ih = h; d.data = cx.getImageData(0, 0, w, h).data;
+    d.name = f.name;
+    d.paint = new Int8Array(w*h);
+    d.paintCv = document.createElement("canvas");
+    d.paintCv.width = w; d.paintCv.height = h;
+    d.strokes = []; d.active = null; d.photo = frameXform(w, h);
+    URL.revokeObjectURL(url);
+    if(analyseImg()){ state.t = 0; syncPos(); }
+  };
+  im.onerror = () => URL.revokeObjectURL(url);
+  im.src = url;
+});
+threshSlider.addEventListener("input", () => {
+  state.img.thresh = +threshSlider.value;
+  document.getElementById("threshVal").textContent = state.img.thresh;
+  analyseImg();
+});
+document.getElementById("btnInvert").addEventListener("click", () => {
+  state.img.invert = !state.img.invert;
+  analyseImg();
+});
+document.getElementById("tgPhoto").addEventListener("change", e => { state.img.showPhoto = e.target.checked; });
+
+const fixSeg = document.getElementById("fixSeg");
+const fixHint = document.getElementById("fixHint");
+const brushSlider = document.getElementById("brush");
+const FIX_HINTS = {
+  pan:  "Drag to move the picture around.",
+  add:  "Paint over anything the trace missed.",
+  cut:  "Paint over anything that should not be part of the subject.",
+  draw: "Trace the edge yourself; your strokes replace the automatic outline."
+};
+function syncUndo(){
+  const t = state.tab;
+  document.getElementById("btnUndo").hidden =
+    t === "snd" || (t === "img" && state.img.fix !== "draw");
+}
+
+function setFix(m){
+  const d = state.img;
+  d.fix = m; d.active = null; d.cursor = null;
+  syncUndo();
+  Array.prototype.forEach.call(fixSeg.querySelectorAll("button"),
+    b => b.setAttribute("aria-pressed", String(b.dataset.fix === m)));
+  fixHint.textContent = FIX_HINTS[m];
+  document.getElementById("brushField").hidden = !(m === "add" || m === "cut");
+  imgStage.style.cursor = m === "pan" ? "grab" : "crosshair";
+  analyseImg();
+}
+fixSeg.addEventListener("click", e => {
+  const b = e.target.closest("button[data-fix]");
+  if(b) setFix(b.dataset.fix);
+});
+brushSlider.addEventListener("input", () => {
+  state.img.brush = +brushSlider.value;
+  document.getElementById("brushVal").textContent = state.img.brush;
+});
+document.getElementById("btnResetEdits").addEventListener("click", () => {
+  const d = state.img;
+  if(d.paint) d.paint.fill(0);
+  if(d.paintCv) d.paintCv.getContext("2d").clearRect(0, 0, d.iw, d.ih);
+  d.strokes = []; d.active = null;
+  analyseImg();
+});
+
+/* brush + freehand on the picture */
+function imgPointer(e){
+  const sf = surface(imgStage), v = mapping(vps.img, sf.w, sf.h), q = localPoint(e, imgStage);
+  return toModel2(q.sx, q.sy, v);
+}
+let painting = false, lastPaint = 0;
+function paintAt(m){
+  const d = state.img;
+  if(!d.paint) return;
+  const ip = modelToImg(m, d.photo), r = d.brush, val = d.fix === "add" ? 1 : -1;
+  const x0 = Math.max(0, Math.floor(ip.x-r)), x1 = Math.min(d.iw-1, Math.ceil(ip.x+r));
+  const y0 = Math.max(0, Math.floor(ip.y-r)), y1 = Math.min(d.ih-1, Math.ceil(ip.y+r));
+  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++)
+    if(Math.hypot(x-ip.x, y-ip.y) <= r) d.paint[y*d.iw+x] = val;
+
+  const pc = d.paintCv.getContext("2d");
+  pc.globalCompositeOperation = "destination-out";
+  pc.beginPath(); pc.arc(ip.x, ip.y, r, 0, Math.PI*2); pc.fill();
+  pc.globalCompositeOperation = "source-over";
+  pc.fillStyle = val > 0 ? "rgba(63,107,51,0.6)" : "rgba(180,50,42,0.6)";
+  pc.beginPath(); pc.arc(ip.x, ip.y, r, 0, Math.PI*2); pc.fill();
+}
+
+imgStage.addEventListener("pointerdown", e => {
+  const d = state.img;
+  if(!d.src || d.fix === "pan") return;
+  imgStage.setPointerCapture(e.pointerId);
+  const m = imgPointer(e);
+  if(d.fix === "draw"){ d.active = [m]; }
+  else { painting = true; paintAt(m); analyseImg(); lastPaint = performance.now(); }
+  e.preventDefault();
+});
+imgStage.addEventListener("pointermove", e => {
+  const d = state.img;
+  if(!d.src || d.fix === "pan") return;
+  const m = imgPointer(e);
+  d.cursor = m;
+  if(d.fix === "draw" && d.active){
+    const prev = d.active[d.active.length-1];
+    if(Math.hypot(m.x-prev.x, m.y-prev.y) > 1.2) d.active.push(m);
+  }else if(painting){
+    paintAt(m);
+    const now = performance.now();
+    if(now - lastPaint > 90){ lastPaint = now; analyseImg(); }   // segmentation is not free
+  }
+});
+function endImgEdit(e){
+  const d = state.img;
+  if(d.fix === "draw" && d.active){
+    if(d.active.length > 2) d.strokes.push(d.active);
+    d.active = null;
+    analyseImg();
+  }else if(painting){
+    painting = false;
+    analyseImg();
+  }
+  if(e) try{ imgStage.releasePointerCapture(e.pointerId); }catch(_){}
+}
+imgStage.addEventListener("pointerup", endImgEdit);
+imgStage.addEventListener("pointercancel", endImgEdit);
+imgStage.addEventListener("pointerleave", () => { state.img.cursor = null; });
+
+/* ---------- tabs ---------- */
+const panel2 = document.getElementById("panel-2d");
+const panel3 = document.getElementById("panel-3d");
+const tab2 = document.getElementById("tab-2d");
+const tab3 = document.getElementById("tab-3d");
+
+const TABS = {"2d":1, "3d":1, snd:1, img:1};
+const panelOf = k => document.getElementById(k === "2d" ? "panel-2d" : k === "3d" ? "panel-3d" : "panel-" + k);
+const tabOf   = k => document.getElementById(k === "2d" ? "tab-2d" : k === "3d" ? "tab-3d" : "tab-" + k);
+
+function setTab(which){
+  state.tab = which;
+  for(const k in TABS){
+    panelOf(k).hidden = k !== which;
+    tabOf(k).setAttribute("aria-selected", String(k === which));
+  }
+  document.getElementById("presets2").parentElement.hidden = which === "img";
+  document.getElementById("presets2").hidden = which !== "2d";
+  document.getElementById("presets3").hidden = which !== "3d";
+  document.getElementById("presets4").hidden = which !== "snd";
+  document.getElementById("wrapSeam").hidden = which !== "3d";
+  document.getElementById("sndTools").hidden = which !== "snd";
+  document.getElementById("imgTools").hidden = which !== "img";
+  document.getElementById("modeSeg").parentElement.hidden = which === "snd";
+  document.getElementById("penLabel").textContent = which === "snd" ? "Playback" : "Pen";
+  document.getElementById("loadLabel").textContent = which === "snd" ? "Or try a test tone" : "Or load a shape";
+  syncUndo();
+  if(which === "snd" && state.mode === "scan") setMode("trace");
+  syncZoom();
+  buildChannels();
+  buildScan(current());   // the other rig may have been built at a different density
+  updateReadouts();
+}
+const TAB_ORDER = ["2d", "3d", "snd", "img"];
+TAB_ORDER.forEach((k, i) => {
+  const el = tabOf(k);
+  el.addEventListener("click", () => setTab(k));
+  el.addEventListener("keydown", e => {
+    if(e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const n = TAB_ORDER[(i + (e.key === "ArrowRight" ? 1 : TAB_ORDER.length-1)) % TAB_ORDER.length];
+    tabOf(n).focus(); setTab(n);
+  });
+});
+
+/* ============================================================
+   Loop
+   ============================================================ */
+
+const strip2mode = document.getElementById("strip2mode");
+const strip2live = document.getElementById("strip2live");
+const strip3live = document.getElementById("strip3live");
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min((now-last)/1000, 0.05);
+  last = now;
+  const rig = current();
+
+  if(state.playing && rig.ready && !state.scrubbing && !(state.tab === "2d" && state.d2.drawing)){
+    state.t = (state.t + dt*0.22*state.speed) % 1;
+    syncPos();
+  }
+
+  const sc = scanState(rig);
+  if(sc) updateScanTau(sc);
+  const live = !rig.ready ? null
+    : sc ? "column " + (sc.ci+1) + " of " + sc.cols + "  \u00b7  x = " + sc.col.X.toFixed(1) +
+           "  \u00b7  " + sc.col.hits.length + (sc.col.hits.length === 1 ? " crossing" : " crossings")
+         : "t = " + state.t.toFixed(3) + "  \u00b7  " + rig.terms[rig.keys[0]].length +
+           (rig.keys.length > 1 ? " sines per axis" : " sines");
+
+  if(state.tab === "2d"){
+    drawBed();
+    strip2mode.textContent = state.d2.drawing ? "Drawing \u2014 release to plot"
+                           : !rig.ready ? "Plotter bed"
+                           : state.mode === "scan" ? "Scanning \u2014 draw again to add a stroke"
+                           : "Plotting \u2014 draw again to add a stroke";
+    strip2live.textContent = live || (state.d2.strokes.length ? state.d2.strokes.length + " strokes" : "\u2014");
+  }else if(state.tab === "3d"){
+    drawView3(); drawPlan(); drawHeight();
+    strip3live.textContent = live || "\u2014";
+  }else if(state.tab === "snd"){
+    drawSndStage(); drawSndWave();
+    document.getElementById("strip4live").textContent = live || "\u2014";
+  }else{
+    drawImgStage();
+    document.getElementById("strip5live").textContent = live || "\u2014";
+  }
+
+  for(let i=0;i<waveCanvases.length;i++) drawWave(waveCanvases[i].cv, waveCanvases[i].key);
+  drawSpectrum();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- boot ---------- */
+if(window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+  state.playing = false;
+  btnPlay.textContent = "Play";
+}
+buildChannels();
+updateReadouts();
+describeSound();
+syncZoom();
+syncUndo();
+requestAnimationFrame(now => { last = now; frame(now); });
+</script>
+</body>
+</html>
